@@ -1,0 +1,12 @@
+services:
+  ros2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: progressive-robotics:humble
+    container_name: progressive_robotics_ros2
+    working_dir: /ros2_ws
+    volumes:
+      - ./src:/ros2_ws/src
+    stdin_open: true
+    tty: true
