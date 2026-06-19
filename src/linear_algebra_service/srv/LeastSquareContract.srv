@@ -1,0 +1,18 @@
+# A is an Mx3 matrix represented as M row vectors.
+# Each Point stores one row [x, y, z] of A.
+geometry_msgs/Point[] a_rows
+
+# 3D vector b.
+geometry_msgs/Vector3 b
+---
+# Rotated-and-displaced least-squares solution x'.
+geometry_msgs/Vector3 x_prime
+
+# Random rotation R' represented as quaternion.
+geometry_msgs/Quaternion r_prime
+
+# Random displacement d'.
+geometry_msgs/Vector3 d_prime
+
+bool success
+string message

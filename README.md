@@ -1,18 +1,30 @@
 # Progressive Robotics Technical Assessment
 
-This repository contains my implementation of the Progressive Robotics technical assessment. The current commit focuses on Step 1: a Dockerized ROS 2 Humble development environment on Ubuntu 22.04.
+This repository contains my implementation of the Progressive Robotics technical assessment.
+
+Progress is organized in milestones:
+
+- Step 1: Dockerized ROS 2 Humble environment
+- Step 2a: Service interface package
+- Step 2b-2e: Nodes and runtime behavior
+- Step 3: UR20 visualization and state control
 
 ## Current Status
 
 - Step 1: Docker environment completed
-- Step 2: Linear algebra ROS 2 service pending
+- Step 2a: Service interface package completed
+- Step 2b: Dummy client and dummy server pending
+- Step 2c: Client implementation pending
+- Step 2d: Server implementation pending
+- Step 2e: Condition variable and threading behavior pending
 - Step 3: UR20 visualization and state control pending
 
 ## Repository Layout
 
 - `Dockerfile`: Builds the ROS 2 Humble development container.
 - `docker-compose.yml`: Starts the development container and mounts local source code into `/ros2_ws/src`.
-- `src/`: Workspace source directory to be populated with ROS 2 packages for later steps.
+- `src/`: Workspace source directory for ROS 2 packages.
+- `src/linear_algebra_service`: Service interface package for Step 2.
 
 ## Step 1: Build and Run
 
@@ -51,7 +63,42 @@ The container installs the following packages required by the assignment:
 - The workspace source directory on the host is mounted to `/ros2_ws/src` in the container.
 - I verified that the Docker image builds successfully and that the compose file parses correctly.
 
+## Step 2a: Service Interface Package
+
+The package `linear_algebra_service` defines the custom service used in Step 2.
+
+- Service file: `src/linear_algebra_service/srv/LeastSquareContract.srv`
+- Request:
+	- `geometry_msgs/Point[] a_rows` for matrix A rows
+	- `geometry_msgs/Vector3 b` for vector b
+- Response:
+	- `geometry_msgs/Vector3 x_prime`
+	- `geometry_msgs/Quaternion r_prime`
+	- `geometry_msgs/Vector3 d_prime`
+	- `bool success`
+	- `string message`
+
+### Build Step 2a package
+
+Inside the container:
+
+```bash
+cd /ros2_ws
+colcon build --packages-select linear_algebra_service
+source install/setup.bash
+```
+
+### Verify generated interface
+
+Inside the container after sourcing:
+
+```bash
+ros2 interface show linear_algebra_service/srv/LeastSquareContract
+```
+
 ## Next Steps
 
-- Implement the ROS 2 linear algebra service for Step 2.
-- Add the UR20 description package and visualization node for Step 3.
+- Complete Step 2b by adding dummy client and server executables in a common nodes package.
+- Complete Step 2c and Step 2d with full client and server logic.
+- Complete Step 2e with subscriber, condition variable, and thread synchronization.
+- Continue to Step 3 after Step 2 integration is validated.
