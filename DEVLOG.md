@@ -55,7 +55,24 @@
 - Added centralized client logging helper with consistent `[CLIENT]` prefix formatting.
 - Verified request/response flow with YAML input and server dummy response.
 
+### Step 2d: Server Least-Squares and Transform Pipeline (completed)
+
+- Upgraded server request handling to full Step 2d behavior.
+- Improved random transform generation quality and runtime behavior:
+  - Moved RNG engine from function-local creation to a `ServerNode` member variable.
+  - Note: reusing a member RNG avoids reseeding and repeated engine construction per request, which improves performance under sustained service calls.
+  - Switched axis sampling to normal-distribution components with normalization for better isotropic direction sampling.
+  - Replaced `M_PI` usage with a portable local `constexpr` PI constant.
+  - Future note: optional deterministic seeding (for reproducible tests) can be added later if needed.
+- Implemented least-squares solution on server using Eigen.
+- Implemented transformed response generation:
+  - `x_prime = R' * x + d'`
+  - Response fields: `x_prime`, `r_prime`, `d_prime`, `success`, `message`
+- Added descriptive server logging of received `A` rows and `b` values.
+- Implemented client-side reverse transform in response handler:
+  - Recover `x` with `x = R'^(-1) * (x' - d')`
+  - Log recovered `x` for verification.
+
 Remaining Step 2 milestones:
 
-- Step 2d: Full server implementation (least squares, random transform, response)
 - Step 2e: Subscriber, condition variable, and wait thread behavior

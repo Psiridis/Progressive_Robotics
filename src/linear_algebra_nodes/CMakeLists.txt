@@ -7,12 +7,14 @@ find_package(geometry_msgs REQUIRED)
 find_package(linear_algebra_service REQUIRED)
 find_package(yaml-cpp REQUIRED)
 find_package(fmt REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 # Server node
 #Binary creation from source file(s)
 add_executable(server_node src/server_node.cpp)
 #Link the target (server_node) to the libraries.
 ament_target_dependencies(server_node rclcpp geometry_msgs linear_algebra_service)
+target_link_libraries(server_node Eigen3::Eigen)
 
 # Client node
 #Binary creation from source file(s)
@@ -21,6 +23,7 @@ add_executable(client_node src/client_node.cpp)
 ament_target_dependencies(client_node rclcpp geometry_msgs linear_algebra_service)
 target_link_libraries(client_node yaml-cpp)
 target_link_libraries(client_node fmt::fmt)
+target_link_libraries(client_node Eigen3::Eigen)
 
 # Install targets into the colcon install tree
 # This is what allows 

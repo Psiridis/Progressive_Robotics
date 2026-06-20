@@ -15,7 +15,7 @@ Progress is organized in milestones:
 - Step 2a: Service interface package completed
 - Step 2b: Dummy client and dummy server completed
 - Step 2c: Client implementation completed
-- Step 2d: Server implementation pending
+- Step 2d: Server implementation completed
 - Step 2e: Condition variable and threading behavior pending
 - Step 3: UR20 visualization and state control pending
 
@@ -145,6 +145,7 @@ Expected output:
 [linear_algebra_client] Client initialized successfully.
 [linear_algebra_client] Sending request with 3 row(s) from '/ros2_ws/src/linear_algebra_nodes/config/input.yaml'.
 [linear_algebra_client] Server response: success=true, message='Request processed successfully.'
+[linear_algebra_client] Recovered x: [..., ..., ...]
 ```
 
 Both nodes should exit cleanly after the request/response exchange completes.
@@ -177,8 +178,29 @@ b: [0.0, 0.0, 0.0]
 
 If validation fails, the client logs an error and exits without sending a request.
 
+## Step 2d: Server Least-Squares and Client Reverse Transform
+
+The server now performs the full least-squares and random-transform pipeline.
+
+- Builds matrix `A` and vector `b` from request data
+- Solves least-squares system using Eigen
+- Generates random transform `(R', d')`
+- Computes transformed solution `x' = R' * x + d'`
+- Returns `x_prime`, `r_prime`, `d_prime`, `success`, and `message`
+
+The client now performs reverse transform after receiving a successful response.
+
+- Reads `x_prime`, `r_prime`, and `d_prime`
+- Computes recovered solution `x = R'^(-1) * (x' - d')`
+- Logs recovered `x`
+
+### Step 2d runtime notes
+
+- Server logs incoming `A` rows and `b` values for traceability.
+- Server random generator is stored as a member variable for better performance under repeated requests.
+- Random rotation axis sampling uses normalized Gaussian components for isotropic direction sampling.
+
 ## Next Steps
 
-- Complete Step 2d with full least squares computation in the server.
 - Complete Step 2e with subscriber, condition variable, and thread synchronization.
 - Continue to Step 3 after Step 2 integration is validated.

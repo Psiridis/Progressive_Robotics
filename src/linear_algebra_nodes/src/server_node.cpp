@@ -1,6 +1,15 @@
+#include <cmath>
+#include <functional>
+#include <optional>
+#include <random>
 #include <string>
 #include <string_view>
 
+#include <Eigen/Dense>
+#include <Eigen/Geometry>
+
+#include "geometry_msgs/msg/quaternion.hpp"
+#include "geometry_msgs/msg/vector3.hpp"
 #include "linear_algebra_service/srv/least_square_contract.hpp"
 #include "rclcpp/rclcpp.hpp"
 
@@ -19,13 +28,31 @@ public:
   void log(std::string_view msg, LogLevel level = LogLevel::Info) const;
 
 private:
+  static constexpr double kPi = 3.14159265358979323846;
+
+  [[nodiscard]] bool validate_request(RequestPtr const& request) const;
+  std::optional<Eigen::Vector3d> solve_least_squares(RequestPtr const& request) const;
+  void generate_random_transform(Eigen::Quaterniond& rotation, Eigen::Vector3d& displacement);
+  static Eigen::Vector3d apply_transform(const Eigen::Vector3d& x,
+                                         const Eigen::Quaterniond& rotation,
+                                         const Eigen::Vector3d& displacement);
+  static geometry_msgs::msg::Vector3 to_vector3(const Eigen::Vector3d& v);
+  static geometry_msgs::msg::Quaternion to_quaternion(const Eigen::Quaterniond& q);
   void handle_request(RequestPtr const request, ResponsePtr response);
 
   rclcpp::Service<LeastSquareContract>::SharedPtr m_service;
+  std::mt19937 m_rng;
+  std::normal_distribution<double> m_axis_dist;
+  std::uniform_real_distribution<double> m_angle_dist;
+  std::uniform_real_distribution<double> m_disp_dist;
 };
 
 /*_________________________________________________________________________________________________*/
-ServerNode::ServerNode(std::string node_name) : Node(node_name) {}
+ServerNode::ServerNode(std::string node_name)
+    : Node(node_name), m_rng(std::random_device{}()), m_axis_dist(0.0, 1.0),
+      m_angle_dist(-kPi, kPi), m_disp_dist(-1.0, 1.0)
+{
+}
 
 /*_________________________________________________________________________________________________*/
 void ServerNode::log(std::string_view msg, LogLevel level) const
@@ -61,11 +88,120 @@ bool ServerNode::init_service(std::string service_name)
 }
 
 /*_________________________________________________________________________________________________*/
+bool ServerNode::validate_request(RequestPtr const& request) const
+{
+  bool valid = true;
+
+  if (request->a_rows.size() != 3) {
+    log("Invalid request: expected exactly 3 rows in a_rows.", LogLevel::Error);
+    valid = false;
+  }
+
+  return valid;
+}
+
+/*_________________________________________________________________________________________________*/
+std::optional<Eigen::Vector3d> ServerNode::solve_least_squares(RequestPtr const& request) const
+{
+  std::optional<Eigen::Vector3d> solution = std::nullopt;
+
+  Eigen::Matrix<double, 3, 3> a;
+  for (std::size_t i = 0; i < 3; ++i) {
+    a(i, 0) = request->a_rows[i].x;
+    a(i, 1) = request->a_rows[i].y;
+    a(i, 2) = request->a_rows[i].z;
+  }
+
+  const Eigen::Vector3d b(request->b.x, request->b.y, request->b.z);
+
+  if (a.isZero(1e-12)) {
+    log("Invalid request: matrix A is all zeros.", LogLevel::Error);
+  } else {
+    solution = a.colPivHouseholderQr().solve(b);
+  }
+
+  return solution;
+}
+
+/*_________________________________________________________________________________________________*/
+void ServerNode::generate_random_transform(Eigen::Quaterniond& rotation,
+                                           Eigen::Vector3d& displacement)
+{
+  Eigen::Vector3d axis(m_axis_dist(m_rng), m_axis_dist(m_rng), m_axis_dist(m_rng));
+  if (axis.norm() < 1e-12) {
+    axis = Eigen::Vector3d::UnitX();
+  }
+  axis.normalize();
+
+  const double angle = m_angle_dist(m_rng);
+  rotation = Eigen::AngleAxisd(angle, axis);
+
+  displacement.x() = m_disp_dist(m_rng);
+  displacement.y() = m_disp_dist(m_rng);
+  displacement.z() = m_disp_dist(m_rng);
+}
+
+/*_________________________________________________________________________________________________*/
+Eigen::Vector3d ServerNode::apply_transform(const Eigen::Vector3d& x,
+                                            const Eigen::Quaterniond& rotation,
+                                            const Eigen::Vector3d& displacement)
+{
+  return rotation * x + displacement;
+}
+
+/*_________________________________________________________________________________________________*/
+geometry_msgs::msg::Vector3 ServerNode::to_vector3(const Eigen::Vector3d& v)
+{
+  geometry_msgs::msg::Vector3 msg;
+  msg.x = v.x();
+  msg.y = v.y();
+  msg.z = v.z();
+  return msg;
+}
+
+/*_________________________________________________________________________________________________*/
+geometry_msgs::msg::Quaternion ServerNode::to_quaternion(const Eigen::Quaterniond& q)
+{
+  geometry_msgs::msg::Quaternion msg;
+  msg.x = q.x();
+  msg.y = q.y();
+  msg.z = q.z();
+  msg.w = q.w();
+  return msg;
+}
+
+/*_________________________________________________________________________________________________*/
 void ServerNode::handle_request(RequestPtr const request, ResponsePtr response)
 {
   log("Received request with " + std::to_string(request->a_rows.size()) + " row(s).");
-  response->success = true;
-  response->message = "Request processed successfully.";
+  for (std::size_t i = 0; i < request->a_rows.size(); ++i) {
+    const auto& row = request->a_rows[i];
+    log("A[" + std::to_string(i) + "] = [" + std::to_string(row.x) + ", " + std::to_string(row.y) +
+        ", " + std::to_string(row.z) + "]");
+  }
+  log("b = [" + std::to_string(request->b.x) + ", " + std::to_string(request->b.y) + ", " +
+      std::to_string(request->b.z) + "]");
+
+  response->success = false;
+  response->message = "Request failed.";
+
+  if (!validate_request(request)) {
+    response->message = "Request validation failed.";
+  } else if (const auto solution = solve_least_squares(request); !solution) {
+    response->message = "Least-squares computation failed.";
+  } else {
+    Eigen::Quaterniond rotation;
+    Eigen::Vector3d displacement;
+    generate_random_transform(rotation, displacement);
+
+    const Eigen::Vector3d x_prime = apply_transform(*solution, rotation, displacement);
+
+    response->x_prime = to_vector3(x_prime);
+    response->r_prime = to_quaternion(rotation);
+    response->d_prime = to_vector3(displacement);
+    response->success = true;
+    response->message = "Request processed successfully.";
+  }
 }
 
 /*_________________________________________________________________________________________________*/

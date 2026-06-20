@@ -14,6 +14,7 @@
   <depend>linear_algebra_service</depend>
   <depend>yaml-cpp</depend>
   <depend>fmt</depend>
+  <depend>eigen</depend>
 
   <export>
     <build_type>ament_cmake</build_type>

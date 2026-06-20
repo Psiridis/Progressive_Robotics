@@ -5,7 +5,11 @@
 #include <string>
 #include <string_view>
 
+#include <Eigen/Geometry>
+
 #include "geometry_msgs/msg/point.hpp"
+#include "geometry_msgs/msg/quaternion.hpp"
+#include "geometry_msgs/msg/vector3.hpp"
 #include "linear_algebra_service/srv/least_square_contract.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "yaml-cpp/yaml.h"
@@ -26,6 +30,8 @@ public:
   void log(std::string_view msg, LogLevel level = LogLevel::Info) const;
 
 private:
+  static Eigen::Vector3d to_eigen(const geometry_msgs::msg::Vector3& v);
+  static Eigen::Quaterniond to_eigen(const geometry_msgs::msg::Quaternion& q);
   void handle_response(ServiceFuture future);
   std::optional<YAML::Node> load_file(const std::string& config_path) const;
   bool validate_yaml_schema(const YAML::Node& config) const;
@@ -182,11 +188,36 @@ void ClientNode::dispatch_request(const RequestPtr& request, const std::string& 
 }
 
 /*_________________________________________________________________________________________________*/
+Eigen::Vector3d ClientNode::to_eigen(const geometry_msgs::msg::Vector3& v)
+{
+  return Eigen::Vector3d(v.x, v.y, v.z);
+}
+
+/*_________________________________________________________________________________________________*/
+Eigen::Quaterniond ClientNode::to_eigen(const geometry_msgs::msg::Quaternion& q)
+{
+  return Eigen::Quaterniond(q.w, q.x, q.y, q.z);
+}
+
+/*_________________________________________________________________________________________________*/
 void ClientNode::handle_response(ServiceFuture future)
 {
   auto response = future.get();
   log(fmt::format("Server response: success={}, message='{}'", response->success ? "true" : "false",
                   response->message));
+
+  if (response->success) {
+    const Eigen::Vector3d x_prime = to_eigen(response->x_prime);
+    const Eigen::Vector3d d_prime = to_eigen(response->d_prime);
+    const Eigen::Quaterniond r_prime = to_eigen(response->r_prime).normalized();
+
+    const Eigen::Vector3d x = r_prime.inverse() * (x_prime - d_prime);
+
+    log(fmt::format("Recovered x: [{:.6f}, {:.6f}, {:.6f}]", x.x(), x.y(), x.z()));
+  } else {
+    log("Skipping reverse transform due to failed server response.", LogLevel::Warn);
+  }
+
   rclcpp::shutdown();
 }
 
