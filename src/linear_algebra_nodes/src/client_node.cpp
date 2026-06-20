@@ -26,6 +26,7 @@ public:
   explicit ClientNode(std::string node_name);
 
   [[nodiscard]] bool init_client(std::string service_name);
+  [[nodiscard]] bool init_publisher(std::string topic_name);
   bool send_request(const std::string& config_path);
   void log(std::string_view msg, LogLevel level = LogLevel::Info) const;
 
@@ -39,6 +40,7 @@ private:
   void dispatch_request(const RequestPtr& request, const std::string& config_path);
 
   rclcpp::Client<LeastSquareContract>::SharedPtr m_client;
+  rclcpp::Publisher<geometry_msgs::msg::Vector3>::SharedPtr m_publisher;
 };
 
 /*_________________________________________________________________________________________________*/
@@ -74,6 +76,14 @@ bool ClientNode::init_client(std::string service_name)
   }
 
   return m_client != nullptr;
+}
+
+/*_________________________________________________________________________________________________*/
+bool ClientNode::init_publisher(std::string topic_name)
+{
+  m_publisher = create_publisher<geometry_msgs::msg::Vector3>(topic_name, 10);
+  log(fmt::format("Publishing on topic '{}'.", topic_name));
+  return m_publisher != nullptr;
 }
 
 /*_________________________________________________________________________________________________*/
@@ -214,6 +224,15 @@ void ClientNode::handle_response(ServiceFuture future)
     const Eigen::Vector3d x = r_prime.inverse() * (x_prime - d_prime);
 
     log(fmt::format("Recovered x: [{:.6f}, {:.6f}, {:.6f}]", x.x(), x.y(), x.z()));
+
+    if (m_publisher) {
+      geometry_msgs::msg::Vector3 msg;
+      msg.x = x.x();
+      msg.y = x.y();
+      msg.z = x.z();
+      m_publisher->publish(msg);
+      log(fmt::format("Published x: [{:.6f}, {:.6f}, {:.6f}] to topic.", x.x(), x.y(), x.z()));
+    }
   } else {
     log("Skipping reverse transform due to failed server response.", LogLevel::Warn);
   }
@@ -237,6 +256,9 @@ int main(int argc, char** argv)
     ret_code = 1;
   } else if (!client->init_client("least_square_service")) {
     client->log("Failed to initialize client.", ClientNode::LogLevel::Error);
+    ret_code = 1;
+  } else if (!client->init_publisher("least_square_topic")) {
+    client->log("Failed to initialize publisher.", ClientNode::LogLevel::Error);
     ret_code = 1;
   } else if (!client->send_request(argv[1])) {
     client->log("Failed to load and send request.", ClientNode::LogLevel::Error);

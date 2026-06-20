@@ -73,6 +73,18 @@
   - Recover `x` with `x = R'^(-1) * (x' - d')`
   - Log recovered `x` for verification.
 
+### Step 2e: Subscriber, Condition Variable, and Wait Thread (completed)
+
+- Implemented client publisher on topic `least_square_topic`.
+- Fixed client publish behavior to match assignment:
+  - Publish recovered `x` (not request `b`) after successful inverse transformation.
+- Implemented server subscriber for `geometry_msgs/msg/Vector3` on `least_square_topic`.
+- Added condition-variable synchronization path in server:
+  - Subscriber callback stores message and notifies condition variable.
+  - Dedicated wait thread blocks until notified.
+  - When notified, wait thread prints received message and then waits again.
+- Added server thread lifecycle management (start on node creation, clean join on destruction).
+
 Remaining Step 2 milestones:
 
-- Step 2e: Subscriber, condition variable, and wait thread behavior
+- Step 2 complete

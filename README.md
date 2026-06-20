@@ -16,7 +16,7 @@ Progress is organized in milestones:
 - Step 2b: Dummy client and dummy server completed
 - Step 2c: Client implementation completed
 - Step 2d: Server implementation completed
-- Step 2e: Condition variable and threading behavior pending
+- Step 2e: Condition variable and threading behavior completed
 - Step 3: UR20 visualization and state control pending
 
 ## Repository Layout
@@ -146,6 +146,7 @@ Expected output:
 [linear_algebra_client] Sending request with 3 row(s) from '/ros2_ws/src/linear_algebra_nodes/config/input.yaml'.
 [linear_algebra_client] Server response: success=true, message='Request processed successfully.'
 [linear_algebra_client] Recovered x: [..., ..., ...]
+[linear_algebra_client] Published x: [..., ..., ...] to topic.
 ```
 
 Both nodes should exit cleanly after the request/response exchange completes.
@@ -200,7 +201,21 @@ The client now performs reverse transform after receiving a successful response.
 - Server random generator is stored as a member variable for better performance under repeated requests.
 - Random rotation axis sampling uses normalized Gaussian components for isotropic direction sampling.
 
+## Step 2e: Subscriber, Condition Variable, and Wait Thread
+
+Step 2e is implemented in the `linear_algebra_nodes` package.
+
+- Client publishes recovered `x` to topic `least_square_topic` after successful response inversion.
+- Server subscribes to `least_square_topic`.
+- Server stores the received message and notifies a condition variable.
+- A separate server thread waits on that condition variable.
+- When notified, the waiting thread prints the received message and waits again for future messages.
+
+### Step 2e runtime notes
+
+- The subscriber callback and waiting thread share data protected by a mutex.
+- The condition variable avoids busy waiting and wakes the thread only when a new message arrives.
+
 ## Next Steps
 
-- Complete Step 2e with subscriber, condition variable, and thread synchronization.
 - Continue to Step 3 after Step 2 integration is validated.

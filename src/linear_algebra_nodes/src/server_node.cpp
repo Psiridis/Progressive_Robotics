@@ -1,9 +1,12 @@
 #include <cmath>
+#include <condition_variable>
 #include <functional>
+#include <mutex>
 #include <optional>
 #include <random>
 #include <string>
 #include <string_view>
+#include <thread>
 
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
@@ -12,7 +15,6 @@
 #include "geometry_msgs/msg/vector3.hpp"
 #include "linear_algebra_service/srv/least_square_contract.hpp"
 #include "rclcpp/rclcpp.hpp"
-
 /*_________________________________________________________________________________________________*/
 class ServerNode : public rclcpp::Node {
   using LeastSquareContract = linear_algebra_service::srv::LeastSquareContract;
@@ -23,12 +25,19 @@ public:
   enum class LogLevel { Info, Warn, Error };
 
   explicit ServerNode(std::string node_name);
+  ~ServerNode() override;
 
   [[nodiscard]] bool init_service(std::string service_name);
+  void init_subscriber(std::string topic_name);
   void log(std::string_view msg, LogLevel level = LogLevel::Info) const;
 
 private:
   static constexpr double kPi = 3.14159265358979323846;
+
+  void on_topic_message(const geometry_msgs::msg::Vector3& msg);
+  void start_wait_thread();
+  void stop_wait_thread();
+  void wait_thread_loop();
 
   [[nodiscard]] bool validate_request(RequestPtr const& request) const;
   std::optional<Eigen::Vector3d> solve_least_squares(RequestPtr const& request) const;
@@ -41,6 +50,13 @@ private:
   void handle_request(RequestPtr const request, ResponsePtr response);
 
   rclcpp::Service<LeastSquareContract>::SharedPtr m_service;
+  rclcpp::Subscription<geometry_msgs::msg::Vector3>::SharedPtr m_subscriber;
+  std::mutex m_mutex;
+  std::condition_variable m_cv;
+  std::thread m_wait_thread;
+  geometry_msgs::msg::Vector3 m_last_message;
+  bool m_message_ready;
+  bool m_stop_requested;
   std::mt19937 m_rng;
   std::normal_distribution<double> m_axis_dist;
   std::uniform_real_distribution<double> m_angle_dist;
@@ -50,8 +66,16 @@ private:
 /*_________________________________________________________________________________________________*/
 ServerNode::ServerNode(std::string node_name)
     : Node(node_name), m_rng(std::random_device{}()), m_axis_dist(0.0, 1.0),
-      m_angle_dist(-kPi, kPi), m_disp_dist(-1.0, 1.0)
+      m_angle_dist(-kPi, kPi), m_disp_dist(-1.0, 1.0), m_message_ready(false),
+      m_stop_requested(false)
 {
+  start_wait_thread();
+}
+
+/*_________________________________________________________________________________________________*/
+ServerNode::~ServerNode()
+{
+  stop_wait_thread();
 }
 
 /*_________________________________________________________________________________________________*/
@@ -85,6 +109,68 @@ bool ServerNode::init_service(std::string service_name)
   }
 
   return m_service != nullptr;
+}
+
+/*_________________________________________________________________________________________________*/
+void ServerNode::init_subscriber(std::string topic_name)
+{
+  m_subscriber = create_subscription<geometry_msgs::msg::Vector3>(
+      topic_name, 10, std::bind(&ServerNode::on_topic_message, this, std::placeholders::_1));
+  log("Subscribed to topic '" + topic_name + "'.");
+}
+
+/*_________________________________________________________________________________________________*/
+void ServerNode::on_topic_message(const geometry_msgs::msg::Vector3& msg)
+{
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_last_message = msg;
+    m_message_ready = true;
+  }
+  m_cv.notify_one();
+}
+
+/*_________________________________________________________________________________________________*/
+void ServerNode::start_wait_thread()
+{
+  m_wait_thread = std::thread(&ServerNode::wait_thread_loop, this);
+}
+
+/*_________________________________________________________________________________________________*/
+void ServerNode::stop_wait_thread()
+{
+  {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_stop_requested = true;
+  }
+  m_cv.notify_all();
+
+  if (m_wait_thread.joinable()) {
+    m_wait_thread.join();
+  }
+}
+
+/*_________________________________________________________________________________________________*/
+void ServerNode::wait_thread_loop()
+{
+  std::unique_lock<std::mutex> lock(m_mutex);
+
+  while (!m_stop_requested) {
+    m_cv.wait(lock, [this]() { return m_message_ready || m_stop_requested; });
+
+    if (m_stop_requested) {
+      break;
+    }
+
+    const geometry_msgs::msg::Vector3 msg = m_last_message;
+    m_message_ready = false;
+    lock.unlock();
+
+    log("Received topic message: b = [" + std::to_string(msg.x) + ", " + std::to_string(msg.y) +
+        ", " + std::to_string(msg.z) + "]");
+
+    lock.lock();
+  }
 }
 
 /*_________________________________________________________________________________________________*/
@@ -219,6 +305,7 @@ int main(int argc, char** argv)
     server->log("Failed to initialize the service.", ServerNode::LogLevel::Error);
     ret_code = 1;
   } else {
+    server->init_subscriber("least_square_topic");
     server->log("Service initialized successfully.");
     rclcpp::spin(server);
   }
