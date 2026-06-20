@@ -13,7 +13,7 @@ Progress is organized in milestones:
 
 - Step 1: Docker environment completed
 - Step 2a: Service interface package completed
-- Step 2b: Dummy client and dummy server pending
+- Step 2b: Dummy client and dummy server completed
 - Step 2c: Client implementation pending
 - Step 2d: Server implementation pending
 - Step 2e: Condition variable and threading behavior pending
@@ -96,9 +96,62 @@ Inside the container after sourcing:
 ros2 interface show linear_algebra_service/srv/LeastSquareContract
 ```
 
+## Step 2b: Dummy Client and Server Nodes
+
+The package `linear_algebra_nodes` contains two executable nodes that communicate via the `LeastSquareContract` service.
+
+- Server node: `src/linear_algebra_nodes/src/server_node.cpp`
+  - Advertises the service on endpoint `least_square_service`
+  - Logs incoming requests
+  - Returns a dummy response with `success=true`
+- Client node: `src/linear_algebra_nodes/src/client_node.cpp`
+  - Connects to service on endpoint `least_square_service`
+  - Sends one dummy request with a 3×3 identity matrix and zero vector
+  - Logs the server response
+  - Shuts down cleanly after receiving response
+
+### Build Step 2b packages
+
+Inside the container:
+
+```bash
+cd /ros2_ws
+colcon build --packages-select linear_algebra_service linear_algebra_nodes
+source install/setup.bash
+```
+
+### Test the client and server
+
+**Terminal 1: Start the server**
+
+```bash
+ros2 run linear_algebra_nodes server_node
+```
+
+Expected output:
+```
+[linear_algebra_server] Service initialized successfully.
+[linear_algebra_server] Received request with 3 row(s).
+```
+
+**Terminal 2: Start the client**
+
+```bash
+ros2 run linear_algebra_nodes client_node
+```
+
+Expected output:
+```
+[linear_algebra_client] Client initialized successfully.
+[linear_algebra_client] Sending dummy request...
+[linear_algebra_client] Server response: success=true, message='Request processed successfully.'
+```
+
+Both nodes should exit cleanly after the request/response exchange completes.
+
 ## Next Steps
 
-- Complete Step 2b by adding dummy client and server executables in a common nodes package.
-- Complete Step 2c and Step 2d with full client and server logic.
+- Complete Step 2c with YAML configuration loading in the client.
+- Complete Step 2d with full least squares computation in the server.
 - Complete Step 2e with subscriber, condition variable, and thread synchronization.
 - Continue to Step 3 after Step 2 integration is validated.

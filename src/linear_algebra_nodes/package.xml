@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>linear_algebra_nodes</name>
+  <version>0.0.0</version>
+  <description>Server and client nodes for the linear algebra least-squares service.</description>
+
+  <maintainer email="psiridis.konstantinos@gmail.com">Konstantinos Psyridis</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>geometry_msgs</depend>
+  <depend>linear_algebra_service</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
