@@ -2,8 +2,8 @@
 # Each Point stores one row [x, y, z] of A.
 geometry_msgs/Point[] a_rows
 
-# 3D vector b.
-geometry_msgs/Vector3 b
+# M-dimensional vector b.
+float64[] b
 ---
 # Rotated-and-displaced least-squares solution x'.
 geometry_msgs/Vector3 x_prime

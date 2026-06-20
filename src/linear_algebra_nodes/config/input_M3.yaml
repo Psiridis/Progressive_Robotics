@@ -1,7 +1,7 @@
 # Input configuration for the LeastSquareContract service.
 #
 # a_rows: list of 3D row vectors representing matrix A (each row is [x, y, z])
-# b:      3D target vector [x, y, z]
+# b:      M-dimensional target vector (same length as a_rows)
 
 a_rows:
   - [1.0, 0.0, 0.0]

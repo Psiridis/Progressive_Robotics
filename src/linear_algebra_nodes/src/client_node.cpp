@@ -128,8 +128,8 @@ bool ClientNode::validate_yaml_schema(const YAML::Node& config) const
     valid = false;
   }
 
-  if (valid && config["a_rows"].size() == 0) {
-    log("Invalid schema: 'a_rows' must contain at least one row.", LogLevel::Error);
+  if (valid && config["a_rows"].size() < 3) {
+    log("Invalid schema: 'a_rows' must contain at least 3 rows.", LogLevel::Error);
     valid = false;
   }
 
@@ -148,8 +148,13 @@ bool ClientNode::validate_yaml_schema(const YAML::Node& config) const
     }
   }
 
-  if (!config["b"] || !config["b"].IsSequence() || config["b"].size() != 3) {
-    log("Invalid schema: 'b' must be a sequence with exactly 3 values.", LogLevel::Error);
+  if (!config["b"] || !config["b"].IsSequence()) {
+    log("Invalid schema: 'b' must be a sequence.", LogLevel::Error);
+    valid = false;
+  }
+
+  if (valid && config["b"].size() != config["a_rows"].size()) {
+    log("Invalid schema: 'b' size must match number of rows in 'a_rows'.", LogLevel::Error);
     valid = false;
   }
 
@@ -175,9 +180,9 @@ std::optional<ClientNode::RequestPtr> ClientNode::parse_yaml_file(const YAML::No
         request->a_rows.push_back(p);
       }
 
-      request->b.x = config["b"][0].as<double>();
-      request->b.y = config["b"][1].as<double>();
-      request->b.z = config["b"][2].as<double>();
+      for (const auto& b_value : config["b"]) {
+        request->b.push_back(b_value.as<double>());
+      }
 
       parsed_request = request;
     } catch (const YAML::Exception& e) {

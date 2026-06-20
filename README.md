@@ -70,7 +70,7 @@ The package `linear_algebra_service` defines the custom service used in Step 2.
 - Service file: `src/linear_algebra_service/srv/LeastSquareContract.srv`
 - Request:
 	- `geometry_msgs/Point[] a_rows` for matrix A rows
-	- `geometry_msgs/Vector3 b` for vector b
+	- `float64[] b` for M-dimensional vector b
 - Response:
 	- `geometry_msgs/Vector3 x_prime`
 	- `geometry_msgs/Quaternion r_prime`
@@ -131,7 +131,7 @@ ros2 run linear_algebra_nodes server_node
 Expected output:
 ```
 [linear_algebra_server] Service initialized successfully.
-[linear_algebra_server] Received request with 3 row(s).
+[linear_algebra_server] Received request with 4 row(s).
 ```
 
 **Terminal 2: Start the client**
@@ -143,7 +143,7 @@ ros2 run linear_algebra_nodes client_node /ros2_ws/src/linear_algebra_nodes/conf
 Expected output:
 ```
 [linear_algebra_client] Client initialized successfully.
-[linear_algebra_client] Sending request with 3 row(s) from '/ros2_ws/src/linear_algebra_nodes/config/input.yaml'.
+[linear_algebra_client] Sending request with 4 row(s) from '/ros2_ws/src/linear_algebra_nodes/config/input.yaml'.
 [linear_algebra_client] Server response: success=true, message='Request processed successfully.'
 [linear_algebra_client] Recovered x: [..., ..., ...]
 [linear_algebra_client] Published x: [..., ..., ...] to topic.
@@ -166,16 +166,18 @@ a_rows:
 	- [1.0, 0.0, 0.0]
 	- [0.0, 1.0, 0.0]
 	- [0.0, 0.0, 1.0]
+	- [1.0, 1.0, 1.0]
 
-b: [0.0, 0.0, 0.0]
+b: [0.0, 0.0, 0.0, 0.0]
 ```
 
 ### Validation rules
 
 - `a_rows` must exist and be a sequence
-- `a_rows` must contain at least one row
+- `a_rows` must contain at least 3 rows
 - each row in `a_rows` must have exactly 3 values
-- `b` must exist and contain exactly 3 values
+- `b` must exist and be a sequence
+- `b` must have the same number of values as `a_rows`
 
 If validation fails, the client logs an error and exits without sending a request.
 

@@ -178,8 +178,13 @@ bool ServerNode::validate_request(RequestPtr const& request) const
 {
   bool valid = true;
 
-  if (request->a_rows.size() != 3) {
-    log("Invalid request: expected exactly 3 rows in a_rows.", LogLevel::Error);
+  if (request->a_rows.size() < 3) {
+    log("Invalid request: expected at least 3 rows in a_rows.", LogLevel::Error);
+    valid = false;
+  }
+
+  if (request->b.size() != request->a_rows.size()) {
+    log("Invalid request: b size must match number of rows in a_rows.", LogLevel::Error);
     valid = false;
   }
 
@@ -191,14 +196,19 @@ std::optional<Eigen::Vector3d> ServerNode::solve_least_squares(RequestPtr const&
 {
   std::optional<Eigen::Vector3d> solution = std::nullopt;
 
-  Eigen::Matrix<double, 3, 3> a;
-  for (std::size_t i = 0; i < 3; ++i) {
+  const std::size_t row_count = request->a_rows.size();
+
+  Eigen::MatrixXd a(static_cast<Eigen::Index>(row_count), 3);
+  for (std::size_t i = 0; i < row_count; ++i) {
     a(i, 0) = request->a_rows[i].x;
     a(i, 1) = request->a_rows[i].y;
     a(i, 2) = request->a_rows[i].z;
   }
 
-  const Eigen::Vector3d b(request->b.x, request->b.y, request->b.z);
+  Eigen::VectorXd b(static_cast<Eigen::Index>(row_count));
+  for (std::size_t i = 0; i < row_count; ++i) {
+    b(i) = request->b[i];
+  }
 
   if (a.isZero(1e-12)) {
     log("Invalid request: matrix A is all zeros.", LogLevel::Error);
@@ -265,8 +275,15 @@ void ServerNode::handle_request(RequestPtr const request, ResponsePtr response)
     log("A[" + std::to_string(i) + "] = [" + std::to_string(row.x) + ", " + std::to_string(row.y) +
         ", " + std::to_string(row.z) + "]");
   }
-  log("b = [" + std::to_string(request->b.x) + ", " + std::to_string(request->b.y) + ", " +
-      std::to_string(request->b.z) + "]");
+  std::string b_line = "b = [";
+  for (std::size_t i = 0; i < request->b.size(); ++i) {
+    b_line += std::to_string(request->b[i]);
+    if (i + 1 < request->b.size()) {
+      b_line += ", ";
+    }
+  }
+  b_line += "]";
+  log(b_line);
 
   response->success = false;
   response->message = "Request failed.";
