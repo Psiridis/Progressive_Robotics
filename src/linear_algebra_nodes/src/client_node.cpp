@@ -1,24 +1,36 @@
 #include <chrono>
+#include <fmt/format.h>
 #include <functional>
+#include <optional>
 #include <string>
+#include <string_view>
 
 #include "geometry_msgs/msg/point.hpp"
 #include "linear_algebra_service/srv/least_square_contract.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "yaml-cpp/yaml.h"
 
 /*_________________________________________________________________________________________________*/
 class ClientNode : public rclcpp::Node {
   using LeastSquareContract = linear_algebra_service::srv::LeastSquareContract;
+  using RequestPtr = std::shared_ptr<LeastSquareContract::Request>;
   using ServiceFuture = rclcpp::Client<LeastSquareContract>::SharedFuture;
 
 public:
+  enum class LogLevel { Info, Warn, Error };
+
   explicit ClientNode(std::string node_name);
 
   [[nodiscard]] bool init_client(std::string service_name);
-  void send_dummy_request();
+  bool send_request(const std::string& config_path);
+  void log(std::string_view msg, LogLevel level = LogLevel::Info) const;
 
 private:
   void handle_response(ServiceFuture future);
+  std::optional<YAML::Node> load_file(const std::string& config_path) const;
+  bool validate_yaml_schema(const YAML::Node& config) const;
+  std::optional<RequestPtr> parse_yaml_file(const YAML::Node& config) const;
+  void dispatch_request(const RequestPtr& request, const std::string& config_path);
 
   rclcpp::Client<LeastSquareContract>::SharedPtr m_client;
 };
@@ -27,43 +39,144 @@ private:
 ClientNode::ClientNode(std::string node_name) : Node(node_name) {}
 
 /*_________________________________________________________________________________________________*/
+void ClientNode::log(std::string_view msg, LogLevel level) const
+{
+  static constexpr const char* kGreen = "\033[32m";
+  static constexpr const char* kReset = "\033[0m";
+  const std::string ros_line = fmt::format("{}[CLIENT]{} {}", kGreen, kReset, msg);
+
+  switch (level) {
+  case LogLevel::Info:
+    RCLCPP_INFO(get_logger(), "%s", ros_line.c_str());
+    break;
+  case LogLevel::Warn:
+    RCLCPP_WARN(get_logger(), "%s", ros_line.c_str());
+    break;
+  case LogLevel::Error:
+    RCLCPP_ERROR(get_logger(), "%s", ros_line.c_str());
+    break;
+  }
+}
+
+/*_________________________________________________________________________________________________*/
 bool ClientNode::init_client(std::string service_name)
 {
   m_client = create_client<LeastSquareContract>(service_name);
 
   while (!m_client->wait_for_service(std::chrono::seconds(1))) {
-    RCLCPP_INFO(get_logger(), "Waiting for service '%s'...", service_name.c_str());
+    log(fmt::format("Waiting for service '{}'...", service_name));
   }
 
   return m_client != nullptr;
 }
 
 /*_________________________________________________________________________________________________*/
-void ClientNode::send_dummy_request()
+bool ClientNode::send_request(const std::string& config_path)
 {
-  auto request = std::make_shared<LeastSquareContract::Request>();
+  bool sent = false;
 
-  geometry_msgs::msg::Point row;
-  row.x = 1.0;
-  row.y = 0.0;
-  row.z = 0.0;
-  request->a_rows.push_back(row);
+  std::optional<YAML::Node> config = load_file(config_path);
 
-  row.x = 0.0;
-  row.y = 1.0;
-  row.z = 0.0;
-  request->a_rows.push_back(row);
+  if (config) {
+    auto request = parse_yaml_file(*config);
+    if (request) {
+      dispatch_request(*request, config_path);
+      sent = true;
+    }
+  }
 
-  row.x = 0.0;
-  row.y = 0.0;
-  row.z = 1.0;
-  request->a_rows.push_back(row);
+  return sent;
+}
 
-  request->b.x = 0.0;
-  request->b.y = 0.0;
-  request->b.z = 0.0;
+/*_________________________________________________________________________________________________*/
+std::optional<YAML::Node> ClientNode::load_file(const std::string& config_path) const
+{
+  std::optional<YAML::Node> loaded_config = std::nullopt;
 
-  RCLCPP_INFO(this->get_logger(), "Sending dummy request...");
+  try {
+    loaded_config = YAML::LoadFile(config_path);
+  } catch (const YAML::Exception& e) {
+    log(fmt::format("Failed to load config '{}': {}", config_path, e.what()), LogLevel::Error);
+  }
+
+  return loaded_config;
+}
+
+/*_________________________________________________________________________________________________*/
+bool ClientNode::validate_yaml_schema(const YAML::Node& config) const
+{
+  bool valid = true;
+
+  if (!config["a_rows"] || !config["a_rows"].IsSequence()) {
+    log("Invalid schema: 'a_rows' must be a sequence of [x, y, z] rows.", LogLevel::Error);
+    valid = false;
+  }
+
+  if (valid && config["a_rows"].size() == 0) {
+    log("Invalid schema: 'a_rows' must contain at least one row.", LogLevel::Error);
+    valid = false;
+  }
+
+  if (valid) {
+    std::size_t row_index = 0;
+    for (const auto& row : config["a_rows"]) {
+      const bool row_ok = row.IsSequence() && row.size() == 3;
+      if (!row_ok) {
+        log(fmt::format("Invalid schema: 'a_rows[{}]' must be a sequence with exactly 3 values.",
+                        row_index),
+            LogLevel::Error);
+        valid = false;
+        break;
+      }
+      ++row_index;
+    }
+  }
+
+  if (!config["b"] || !config["b"].IsSequence() || config["b"].size() != 3) {
+    log("Invalid schema: 'b' must be a sequence with exactly 3 values.", LogLevel::Error);
+    valid = false;
+  }
+
+  return valid;
+}
+
+/*_________________________________________________________________________________________________*/
+std::optional<ClientNode::RequestPtr> ClientNode::parse_yaml_file(const YAML::Node& config) const
+{
+  std::optional<RequestPtr> parsed_request = std::nullopt;
+
+  const bool schema_valid = validate_yaml_schema(config);
+
+  if (schema_valid) {
+    try {
+      auto request = std::make_shared<LeastSquareContract::Request>();
+
+      for (const auto& row : config["a_rows"]) {
+        geometry_msgs::msg::Point p;
+        p.x = row[0].as<double>();
+        p.y = row[1].as<double>();
+        p.z = row[2].as<double>();
+        request->a_rows.push_back(p);
+      }
+
+      request->b.x = config["b"][0].as<double>();
+      request->b.y = config["b"][1].as<double>();
+      request->b.z = config["b"][2].as<double>();
+
+      parsed_request = request;
+    } catch (const YAML::Exception& e) {
+      log(fmt::format("Failed to parse config: {}", e.what()), LogLevel::Error);
+    }
+  }
+
+  return parsed_request;
+}
+
+/*_________________________________________________________________________________________________*/
+void ClientNode::dispatch_request(const RequestPtr& request, const std::string& config_path)
+{
+  log(fmt::format("Sending request with {} row(s) from '{}'.", request->a_rows.size(),
+                  config_path));
   m_client->async_send_request(
       request, std::bind(&ClientNode::handle_response, this, std::placeholders::_1));
 }
@@ -72,8 +185,8 @@ void ClientNode::send_dummy_request()
 void ClientNode::handle_response(ServiceFuture future)
 {
   auto response = future.get();
-  RCLCPP_INFO(this->get_logger(), "Server response: success=%s, message='%s'",
-              response->success ? "true" : "false", response->message.c_str());
+  log(fmt::format("Server response: success={}, message='{}'", response->success ? "true" : "false",
+                  response->message));
   rclcpp::shutdown();
 }
 
@@ -88,12 +201,16 @@ int main(int argc, char** argv)
   if (!client) {
     RCLCPP_ERROR(rclcpp::get_logger("linear_algebra_client"), "Client node is null.");
     ret_code = 1;
+  } else if (argc < 2) {
+    client->log("Usage: client_node <config.yaml>", ClientNode::LogLevel::Error);
+    ret_code = 1;
   } else if (!client->init_client("least_square_service")) {
-    RCLCPP_ERROR(client->get_logger(), "Failed to initialize client.");
+    client->log("Failed to initialize client.", ClientNode::LogLevel::Error);
+    ret_code = 1;
+  } else if (!client->send_request(argv[1])) {
+    client->log("Failed to load and send request.", ClientNode::LogLevel::Error);
     ret_code = 1;
   } else {
-    RCLCPP_INFO(client->get_logger(), "Client initialized successfully.");
-    client->send_dummy_request();
     rclcpp::spin(client);
   }
 

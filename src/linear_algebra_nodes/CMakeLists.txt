@@ -5,6 +5,8 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(linear_algebra_service REQUIRED)
+find_package(yaml-cpp REQUIRED)
+find_package(fmt REQUIRED)
 
 # Server node
 #Binary creation from source file(s)
@@ -17,6 +19,8 @@ ament_target_dependencies(server_node rclcpp geometry_msgs linear_algebra_servic
 add_executable(client_node src/client_node.cpp)
 #Link the target (client_node) to the libraries.
 ament_target_dependencies(client_node rclcpp geometry_msgs linear_algebra_service)
+target_link_libraries(client_node yaml-cpp)
+target_link_libraries(client_node fmt::fmt)
 
 # Install targets into the colcon install tree
 # This is what allows 

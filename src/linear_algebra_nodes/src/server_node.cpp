@@ -1,4 +1,5 @@
 #include <string>
+#include <string_view>
 
 #include "linear_algebra_service/srv/least_square_contract.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -10,9 +11,12 @@ class ServerNode : public rclcpp::Node {
   using ResponsePtr = std::shared_ptr<LeastSquareContract::Response>;
 
 public:
+  enum class LogLevel { Info, Warn, Error };
+
   explicit ServerNode(std::string node_name);
 
   [[nodiscard]] bool init_service(std::string service_name);
+  void log(std::string_view msg, LogLevel level = LogLevel::Info) const;
 
 private:
   void handle_request(RequestPtr const request, ResponsePtr response);
@@ -22,6 +26,26 @@ private:
 
 /*_________________________________________________________________________________________________*/
 ServerNode::ServerNode(std::string node_name) : Node(node_name) {}
+
+/*_________________________________________________________________________________________________*/
+void ServerNode::log(std::string_view msg, LogLevel level) const
+{
+  static constexpr const char* kRed = "\033[31m";
+  static constexpr const char* kReset = "\033[0m";
+  const std::string line = std::string(kRed) + "[SERVER]" + kReset + " " + std::string(msg);
+
+  switch (level) {
+  case LogLevel::Info:
+    RCLCPP_INFO(get_logger(), "%s", line.c_str());
+    break;
+  case LogLevel::Warn:
+    RCLCPP_WARN(get_logger(), "%s", line.c_str());
+    break;
+  case LogLevel::Error:
+    RCLCPP_ERROR(get_logger(), "%s", line.c_str());
+    break;
+  }
+}
 
 /*_________________________________________________________________________________________________*/
 bool ServerNode::init_service(std::string service_name)
@@ -39,7 +63,7 @@ bool ServerNode::init_service(std::string service_name)
 /*_________________________________________________________________________________________________*/
 void ServerNode::handle_request(RequestPtr const request, ResponsePtr response)
 {
-  RCLCPP_INFO(this->get_logger(), "Received request with %zu row(s).", request->a_rows.size());
+  log("Received request with " + std::to_string(request->a_rows.size()) + " row(s).");
   response->success = true;
   response->message = "Request processed successfully.";
 }
@@ -56,10 +80,10 @@ int main(int argc, char** argv)
     RCLCPP_ERROR(rclcpp::get_logger("linear_algebra_server"), "Server node is null.");
     ret_code = 1;
   } else if (!server->init_service("least_square_service")) {
-    RCLCPP_ERROR(server->get_logger(), "Failed to initialize the service.");
+    server->log("Failed to initialize the service.", ServerNode::LogLevel::Error);
     ret_code = 1;
   } else {
-    RCLCPP_INFO(server->get_logger(), "Service initialized successfully.");
+    server->log("Service initialized successfully.");
     rclcpp::spin(server);
   }
 

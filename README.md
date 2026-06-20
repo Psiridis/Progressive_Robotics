@@ -14,7 +14,7 @@ Progress is organized in milestones:
 - Step 1: Docker environment completed
 - Step 2a: Service interface package completed
 - Step 2b: Dummy client and dummy server completed
-- Step 2c: Client implementation pending
+- Step 2c: Client implementation completed
 - Step 2d: Server implementation pending
 - Step 2e: Condition variable and threading behavior pending
 - Step 3: UR20 visualization and state control pending
@@ -137,21 +137,48 @@ Expected output:
 **Terminal 2: Start the client**
 
 ```bash
-ros2 run linear_algebra_nodes client_node
+ros2 run linear_algebra_nodes client_node /ros2_ws/src/linear_algebra_nodes/config/input.yaml
 ```
 
 Expected output:
 ```
 [linear_algebra_client] Client initialized successfully.
-[linear_algebra_client] Sending dummy request...
+[linear_algebra_client] Sending request with 3 row(s) from '/ros2_ws/src/linear_algebra_nodes/config/input.yaml'.
 [linear_algebra_client] Server response: success=true, message='Request processed successfully.'
 ```
 
 Both nodes should exit cleanly after the request/response exchange completes.
 
+## Step 2c: Client YAML Input and Validation
+
+The client now loads request data from a YAML file instead of using hard-coded dummy values.
+
+- Input file: `src/linear_algebra_nodes/config/input.yaml`
+- Runtime usage:
+	- `ros2 run linear_algebra_nodes client_node /ros2_ws/src/linear_algebra_nodes/config/input.yaml`
+
+### Supported YAML schema
+
+```yaml
+a_rows:
+	- [1.0, 0.0, 0.0]
+	- [0.0, 1.0, 0.0]
+	- [0.0, 0.0, 1.0]
+
+b: [0.0, 0.0, 0.0]
+```
+
+### Validation rules
+
+- `a_rows` must exist and be a sequence
+- `a_rows` must contain at least one row
+- each row in `a_rows` must have exactly 3 values
+- `b` must exist and contain exactly 3 values
+
+If validation fails, the client logs an error and exits without sending a request.
+
 ## Next Steps
 
-- Complete Step 2c with YAML configuration loading in the client.
 - Complete Step 2d with full least squares computation in the server.
 - Complete Step 2e with subscriber, condition variable, and thread synchronization.
 - Continue to Step 3 after Step 2 integration is validated.

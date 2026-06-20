@@ -37,8 +37,25 @@
 - Updated `README.md` with Step 2b build and test instructions
 - Ready to commit after running integration test
 
+### Step 2c: Full Client Input Path (completed)
+
+- Refactored `ClientNode` request flow into smaller helper methods:
+  - `load_file(...)`
+  - `validate_yaml_schema(...)`
+  - `parse_yaml_file(...)`
+  - `dispatch_request(...)`
+- Replaced hard-coded dummy request values with YAML-driven input loading.
+- Added schema validation before parsing:
+  - `a_rows` must exist and be a non-empty sequence
+  - every `a_rows[i]` must contain exactly 3 values
+  - `b` must exist and contain exactly 3 values
+- Added clear error logging for file load, schema validation, and parsing failures.
+- Updated client runtime usage to require config path argument:
+  - `ros2 run linear_algebra_nodes client_node /ros2_ws/src/linear_algebra_nodes/config/input.yaml`
+- Added centralized client logging helper with consistent `[CLIENT]` prefix formatting.
+- Verified request/response flow with YAML input and server dummy response.
+
 Remaining Step 2 milestones:
 
-- Step 2c: Full client implementation (YAML loading, inverse transform, publish)
 - Step 2d: Full server implementation (least squares, random transform, response)
 - Step 2e: Subscriber, condition variable, and wait thread behavior
