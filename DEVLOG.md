@@ -1,5 +1,14 @@
 # Development Log
 
+## 2026-06-21
+
+### Step 3: UR Description Dependency
+
+- Added `src/ur_description` as a git submodule.
+- Configured the submodule in `.gitmodules` to track `https://github.com/UniversalRobots/Universal_Robots_ROS2_Description.git` on the `humble` branch.
+- Committed the submodule pointer so the workspace now records the exact upstream revision used for UR20 visualization work.
+- Updated `README.md` to document the new dependency and the required submodule initialization workflow.
+
 ## 2026-06-19
 
 - Set up the Step 1 Docker environment on Ubuntu 22.04.

@@ -17,6 +17,7 @@ Progress is organized in milestones:
 - Step 2c: Client implementation completed
 - Step 2d: Server implementation completed
 - Step 2e: Condition variable and threading behavior completed
+- Step 3: UR description dependency added
 - Step 3: UR20 visualization and state control pending
 
 ## Repository Layout
@@ -25,6 +26,22 @@ Progress is organized in milestones:
 - `docker-compose.yml`: Starts the development container and mounts local source code into `/ros2_ws/src`.
 - `src/`: Workspace source directory for ROS 2 packages.
 - `src/linear_algebra_service`: Service interface package for Step 2.
+- `src/linear_algebra_nodes`: Client/server package for Step 2 runtime behavior.
+- `src/ur_description`: Git submodule that tracks the Universal Robots ROS 2 description package used for Step 3.
+
+## Clone With Submodules
+
+Clone the repository with its external robot-description dependency:
+
+```bash
+git clone --recurse-submodules <repo-url>
+```
+
+If the repository is already cloned, initialize and fetch the submodule with:
+
+```bash
+git submodule update --init --recursive
+```
 
 ## Step 1: Build and Run
 
@@ -218,6 +235,16 @@ Step 2e is implemented in the `linear_algebra_nodes` package.
 - The subscriber callback and waiting thread share data protected by a mutex.
 - The condition variable avoids busy waiting and wakes the thread only when a new message arrives.
 
+## Step 3: UR Description Dependency
+
+Step 3 now includes the external Universal Robots description repository as a git submodule.
+
+- Submodule path: `src/ur_description`
+- Remote repository: `https://github.com/UniversalRobots/Universal_Robots_ROS2_Description.git`
+- Tracked branch: `humble`
+
+This keeps the vendor robot description assets versioned separately while making them available inside the ROS 2 workspace for UR20 visualization work.
+
 ## Next Steps
 
-- Continue to Step 3 after Step 2 integration is validated.
+- Build and validate the Step 3 visualization flow using the `ur_description` submodule.
