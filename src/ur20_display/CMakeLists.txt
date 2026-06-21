@@ -9,10 +9,41 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
-find_package(rviz_visual_tools REQUIRED)
+find_package(tf2_eigen REQUIRED)
 find_package(Eigen3 REQUIRED)
+
+# Build ur20_display_node executable
+add_executable(ur20_display_node src/ur20_display_node.cpp)
+
+target_include_directories(ur20_display_node PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+ament_target_dependencies(ur20_display_node
+  rclcpp
+  sensor_msgs
+  geometry_msgs
+  std_msgs
+  visualization_msgs
+  tf2
+  tf2_ros
+  tf2_eigen
+)
+
+target_link_libraries(ur20_display_node Eigen3::Eigen)
+
+install(TARGETS ur20_display_node
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(DIRECTORY include/
+  DESTINATION include
+)
 
 install(DIRECTORY
   launch

@@ -9,6 +9,43 @@
 - Committed the submodule pointer so the workspace now records the exact upstream revision used for UR20 visualization work.
 - Updated `README.md` to document the new dependency and the required submodule initialization workflow.
 
+### Step 3: UR20 model + launch scaffold (completed)
+
+- Created `ur20_display` package scaffold and integrated UR20 model through `xacro`.
+- Added custom fixed-joint gripper link in `ur20_with_gripper.urdf.xacro`.
+- Added launch orchestration for:
+  - `robot_state_publisher`
+  - `ur20_display_node`
+  - conditional `rviz2` startup
+- Added RViz configuration for grid/robot model/default view.
+- Added launch argument `enable_rviz` so development can run headless.
+
+### Step 3: ur20_display_node implementation (completed)
+
+- Refactored node into declaration/implementation split:
+  - `include/ur20_display/ur20_display_node.hpp`
+  - `src/ur20_display_node.cpp`
+- Implemented joint-state publisher from parameterized joint configuration.
+- Implemented TF lookup pipeline using small helper methods.
+- Parameterized frame names (`world_frame`, `elbow_frame`, `gripper_frame`) and defaulted elbow frame to `forearm_link`.
+- Implemented Eigen transform conversion and chain verification:
+  - `T_world_gripper = T_world_elbow * T_elbow_gripper`
+- Implemented marker publication of:
+  - oriented frame axes (LINE_LIST)
+  - text marker `Tf_elbow_gripper`
+- Added runtime guard for invalid parameter sizes (`joint_names` vs `joint_positions`).
+
+### Step 3: Build + runtime verification (completed)
+
+- Built `ur20_display` package successfully in Docker.
+- Verified headless launch path:
+  - `ros2 launch ur20_display ur20_display_launch.py enable_rviz:=false`
+- Confirmed robot_state_publisher loads all expected UR20 + gripper segments.
+- Confirmed `/joint_states` is published with the configured six UR joint names.
+- Confirmed `/ur20_display_markers` publishes `visualization_msgs/msg/MarkerArray` including:
+  - oriented frame marker
+  - label marker with text `Tf_elbow_gripper`
+
 ## 2026-06-19
 
 - Set up the Step 1 Docker environment on Ubuntu 22.04.

@@ -12,9 +12,11 @@
   <depend>rclcpp</depend>
   <depend>sensor_msgs</depend>
   <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>visualization_msgs</depend>
   <depend>tf2</depend>
   <depend>tf2_ros</depend>
-  <depend>rviz_visual_tools</depend>
+  <depend>tf2_eigen</depend>
   <depend>eigen</depend>
   <depend>robot_state_publisher</depend>
   <exec_depend>launch</exec_depend>

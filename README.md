@@ -18,7 +18,9 @@ Progress is organized in milestones:
 - Step 2d: Server implementation completed
 - Step 2e: Condition variable and threading behavior completed
 - Step 3: UR description dependency added
-- Step 3: UR20 visualization and state control pending
+- Step 3: UR20 model + gripper integration completed
+- Step 3: ur20_display node implementation completed
+- Step 3: Headless and optional RViz launch flow completed
 
 ## Repository Layout
 
@@ -245,6 +247,97 @@ Step 3 now includes the external Universal Robots description repository as a gi
 
 This keeps the vendor robot description assets versioned separately while making them available inside the ROS 2 workspace for UR20 visualization work.
 
+## Step 3: UR20 Visualization and State Control
+
+The package `ur20_display` now contains the full Step 3 implementation.
+
+- UR20 + custom gripper model: `src/ur20_display/urdf/ur20_with_gripper.urdf.xacro`
+- Launch file: `src/ur20_display/launch/ur20_display_launch.py`
+- State/TF node: `src/ur20_display/src/ur20_display_node.cpp`
+- Node declaration header: `src/ur20_display/include/ur20_display/ur20_display_node.hpp`
+- RViz config: `src/ur20_display/rviz/ur20_display.rviz`
+
+### Node behavior (`ur20_display_node`)
+
+- Publishes `sensor_msgs/msg/JointState` on `/joint_states` using parameterized joint values.
+- Listens to TF transforms:
+	- `T_elbow_gripper`
+	- `T_world_elbow`
+	- `T_world_gripper`
+- Converts transforms to `Eigen::Isometry3d`.
+- Verifies chain consistency:
+
+$$
+T_{world,gripper} = T_{world,elbow} \cdot T_{elbow,gripper}
+$$
+
+- Publishes visualization markers on `/ur20_display_markers`:
+	- oriented XYZ frame (line-list axes)
+	- text label `Tf_elbow_gripper`
+
+### Launch arguments
+
+- `use_sim_time` (default `false`)
+- `enable_rviz` (default `false`)
+
+`enable_rviz:=false` keeps runtime headless for clean development logs.
+
+### Build
+
+Inside the container:
+
+```bash
+cd /ros2_ws
+colcon build --packages-select ur20_display
+source install/setup.bash
+```
+
+### Run (headless)
+
+```bash
+ros2 launch ur20_display ur20_display_launch.py enable_rviz:=false
+```
+
+### Run (with RViz)
+
+```bash
+ros2 launch ur20_display ur20_display_launch.py enable_rviz:=true
+```
+
+### Validation checklist
+
+In a second shell, after launch:
+
+```bash
+source /opt/ros/humble/setup.bash
+source /ros2_ws/install/setup.bash
+```
+
+1. Check topics:
+
+```bash
+ros2 topic list
+```
+
+Expected topics include `/joint_states`, `/tf`, `/tf_static`, `/ur20_display_markers`.
+
+2. Check one `JointState` sample:
+
+```bash
+ros2 topic echo /joint_states --once
+```
+
+3. Check one MarkerArray sample:
+
+```bash
+ros2 topic echo /ur20_display_markers visualization_msgs/msg/MarkerArray --once
+```
+
+Expected marker payload includes:
+- line-list marker for axes
+- text marker with `text: Tf_elbow_gripper`
+
 ## Next Steps
 
-- Build and validate the Step 3 visualization flow using the `ur_description` submodule.
+- Optional: add bonus trajectory animation publisher.
+- Optional: add Python trajectory plotter node.
