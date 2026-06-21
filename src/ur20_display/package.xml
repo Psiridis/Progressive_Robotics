@@ -17,6 +17,9 @@
   <depend>rviz_visual_tools</depend>
   <depend>eigen</depend>
   <depend>robot_state_publisher</depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>rviz2</exec_depend>
   <depend>xacro</depend>
   <depend>ur_description</depend>
 

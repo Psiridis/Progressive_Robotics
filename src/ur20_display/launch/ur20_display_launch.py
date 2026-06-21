@@ -14,6 +14,12 @@ def generate_launch_description():
         "ur20_with_gripper.urdf.xacro",
     ])
 
+    rviz_config_file = PathJoinSubstitution([
+        FindPackageShare("ur20_display"),
+        "rviz",
+        "ur20_display.rviz",
+    ])
+
     robot_description = {
         "robot_description": Command([
             "xacro ",
@@ -39,10 +45,12 @@ def generate_launch_description():
             ],
         ),
 
-        Node(
-            package="rviz2",
-            executable="rviz2",
-            name="rviz2",
-            output="screen",
-        ),
+        # RViz node commented out during node development; uncomment when GUI is ready
+        # Node(
+        #     package="rviz2",
+        #     executable="rviz2",
+        #     name="rviz2",
+        #     output="screen",
+        #     arguments=["-d", rviz_config_file],
+        # ),
     ])
