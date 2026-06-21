@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-dev-tools \
     libeigen3-dev \
     libyaml-cpp-dev \
+    ros-humble-xacro \
     ros-humble-rviz-visual-tools \
     && rm -rf /var/lib/apt/lists/*
 
