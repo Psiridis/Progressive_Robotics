@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>ur20_display</name>
+  <version>0.0.0</version>
+  <description>UR20 visualization, joint-state publishing, and TF verification package.</description>
+
+  <maintainer email="psiridis.konstantinos@outlook.com">Konstantinos Psyridis</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>rviz_visual_tools</depend>
+  <depend>eigen</depend>
+  <depend>robot_state_publisher</depend>
+  <depend>xacro</depend>
+  <depend>ur_description</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
