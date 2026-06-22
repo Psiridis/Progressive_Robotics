@@ -278,7 +278,15 @@ $$
 ### Launch arguments
 
 - `use_sim_time` (default `false`)
+  - Use simulation clock instead of wall clock
+
 - `enable_rviz` (default `false`)
+  - Launch RViz window for visualization
+
+- `use_software_rendering` (default `true`)
+  - Force Mesa software (CPU) rendering for RViz
+  - Essential when running through Docker/XQuartz on macOS
+  - Set to `false` only on native Linux with full GPU/OpenGL support
 
 `enable_rviz:=false` keeps runtime headless for clean development logs.
 
@@ -303,6 +311,109 @@ ros2 launch ur20_display ur20_display_launch.py enable_rviz:=false
 ```bash
 ros2 launch ur20_display ur20_display_launch.py enable_rviz:=true
 ```
+
+### macOS GUI Forwarding Setup (Required for RViz)
+
+RViz on macOS requires X11 forwarding through Docker. Follow these steps:
+
+#### Step 1: Install XQuartz (one-time)
+
+```bash
+brew install --cask xquartz
+```
+
+#### Step 2: Configure XQuartz Security Settings (one-time)
+
+1. Start XQuartz:
+   ```bash
+   open -a XQuartz
+   ```
+
+2. Go to XQuartz menu > Preferences
+
+3. Navigate to the **Security** tab
+
+4. **Enable** "Allow connections from network clients"
+
+5. Restart XQuartz (close and reopen)
+
+#### Step 3: Allow Localhost X11 Connections (each terminal session)
+
+Before launching the container, run:
+
+```bash
+xhost +localhost
+```
+
+Expected output:
+```
+localhost being added to access control list
+```
+
+#### Step 4: Launch with RViz
+
+Now run the launch command with `enable_rviz:=true`:
+
+```bash
+ros2 launch ur20_display ur20_display_launch.py enable_rviz:=true
+```
+
+RViz should open within 3-5 seconds.
+
+#### Troubleshooting macOS RViz Issues
+
+**RViz window doesn't appear:**
+
+1. Verify XQuartz is running:
+   ```bash
+   ps aux | grep XQuartz
+   ```
+   If not running, open it:
+   ```bash
+   open -a XQuartz
+   ```
+
+2. Verify xhost permissions:
+   ```bash
+   xhost
+   ```
+   Should show `localhost` in the access list. If missing, run:
+   ```bash
+   xhost +localhost
+   ```
+
+3. Test X11 forwarding directly (inside container):
+   ```bash
+   ros2 run rviz2 rviz2
+   ```
+   If this also shows no window, the issue is X11 forwarding, not ROS.
+
+4. Check docker-compose.yml DISPLAY variable:
+   ```bash
+   grep DISPLAY docker-compose.yml
+   ```
+   Should show `DISPLAY=host.docker.internal:0`
+
+5. Verify software rendering is enabled in launch file:
+   ```bash
+   ros2 launch ur20_display ur20_display_launch.py enable_rviz:=true use_software_rendering:=true
+   ```
+
+**RViz opens but runs slowly or appears glitchy:**
+
+- This is normal on macOS with Docker/XQuartz forwarding
+- RViz is using software (CPU) rendering instead of GPU
+- To reduce latency, close unnecessary markers or simplify the scene
+
+**Qt error: "Could not connect to display":**
+
+1. Ensure XQuartz is running
+2. Verify xhost has localhost enabled
+3. Check that DISPLAY environment variable is set:
+   ```bash
+   echo $DISPLAY
+   ```
+   Should show something like `host.docker.internal:0`
 
 ### Validation checklist
 
