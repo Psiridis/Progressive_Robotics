@@ -10,7 +10,6 @@
 #include <Eigen/Dense>
 #include <Eigen/Geometry>
 
-#include "geometry_msgs/msg/transform.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
@@ -19,26 +18,17 @@
 #include "tf2_ros/transform_listener.h"
 #include "visualization_msgs/msg/marker_array.hpp"
 
-class UR20DisplayNode : public rclcpp::Node
-{
+class UR20DisplayNode : public rclcpp::Node {
 public:
-  enum class LogLevel
-  {
-    Info,
-    Warn,
-    Error,
-    Debug
-  };
+  enum class LogLevel { Info, Warn, Error, Debug };
 
-  struct TransformChain
-  {
+  struct TransformChain {
     geometry_msgs::msg::TransformStamped tf_elbow_gripper;
     geometry_msgs::msg::TransformStamped tf_world_elbow;
     geometry_msgs::msg::TransformStamped tf_world_gripper;
   };
 
-  struct VerificationResult
-  {
+  struct VerificationResult {
     double position_error{0.0};
     double rotation_error{0.0};
   };
@@ -46,10 +36,9 @@ public:
   UR20DisplayNode();
 
   void log(std::string_view msg, LogLevel level = LogLevel::Info) const;
-  void log_throttle(
-    std::string_view msg,
-    LogLevel level = LogLevel::Info,
-    int64_t duration_ms = 3000);
+
+  void log_throttle(std::string_view msg, LogLevel level = LogLevel::Info,
+                    int64_t duration_ms = 3000);
 
 private:
   void init_publishers();
@@ -58,20 +47,30 @@ private:
   void load_parameters();
 
   [[nodiscard]] bool validate_joint_parameters() const;
+  [[nodiscard]] bool validate_animation_parameters() const;
   void log_configuration() const;
 
   void publish_joint_state();
   [[nodiscard]] std::optional<TransformChain> lookup_transforms() const;
 
-  [[nodiscard]] static Eigen::Isometry3d to_isometry(
-    const geometry_msgs::msg::Transform& transform_msg);
+  static Eigen::Isometry3d to_isometry(const geometry_msgs::msg::Transform& transform_msg);
 
-  [[nodiscard]] VerificationResult verify_chain(
-    const TransformChain& chain,
-    Eigen::Isometry3d& t_world_gripper_computed) const;
+  [[nodiscard]] VerificationResult verify_chain(const TransformChain& chain,
+                                                Eigen::Isometry3d& t_world_gripper_computed) const;
 
   void publish_frame_and_label(const Eigen::Isometry3d& t_world_gripper_computed);
   void log_verification(const VerificationResult& result) const;
+
+  [[nodiscard]] std::optional<std::vector<double>> generate_random_goal_configuration() const;
+
+  [[nodiscard]] std::optional<std::vector<std::vector<double>>>
+  generate_periodic_trajectory(const std::vector<double>& start_config,
+                               const std::vector<double>& goal_config, double periods,
+                               int points_per_period) const;
+
+  void initialize_animation();
+  void publish_next_trajectory_point();
+
   void timer_callback();
 
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr m_joint_pub;
@@ -87,4 +86,16 @@ private:
   std::string m_world_frame;
   std::string m_elbow_frame;
   std::string m_gripper_frame;
+
+  bool m_enable_animation{false};
+  bool m_animation_initialized{false};
+  bool m_animation_finished{false};
+
+  double m_trajectory_periods{1.5};
+  int m_trajectory_points_per_period{100};
+
+  std::vector<double> m_initial_joint_positions;
+  std::vector<double> m_goal_configuration;
+  std::vector<std::vector<double>> m_trajectory;
+  std::size_t m_trajectory_index{0};
 };

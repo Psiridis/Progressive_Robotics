@@ -283,6 +283,15 @@ $$
 - `enable_rviz` (default `false`)
   - Launch RViz window for visualization
 
+- `enable_animation` (default `true`)
+   - Enable periodic joint trajectory animation in `ur20_display_node`
+
+- `trajectory_periods` (default `1.5`)
+   - Number of sinusoidal periods to generate for the animation
+
+- `trajectory_points_per_period` (default `100`)
+   - Number of discrete trajectory points generated per period
+
 - `use_software_rendering` (default `true`)
   - Force Mesa software (CPU) rendering for RViz
   - Essential when running through Docker/XQuartz on macOS
@@ -448,7 +457,71 @@ Expected marker payload includes:
 - line-list marker for axes
 - text marker with `text: Tf_elbow_gripper`
 
+## Bonus: Trajectory Animation
+
+The `ur20_display_node` includes a periodic trajectory feature that animates robot joints from the configured start pose to a random goal pose and back, while publishing `sensor_msgs/msg/JointState` at timer rate.
+
+### Runtime behavior
+
+1. On startup, the node validates joint and animation parameters.
+2. If animation is enabled, it generates a random UR20-compatible goal configuration.
+3. It generates a periodic sinusoidal trajectory and stores all points.
+4. In each timer callback, it publishes the next trajectory point.
+5. After all points are published, it logs completion and continues publishing the final state.
+6. If animation is disabled (or generation fails), it publishes static configured joint values.
+
+### Interpolation model
+
+The trajectory point for each joint is generated from:
+
+$$
+q(t) = q_{start} + \alpha(t) \cdot (q_{goal} - q_{start}), \qquad
+\alpha(t)=\frac{1 - \cos\left(2\pi p t\right)}{2}
+$$
+
+where $p$ is `trajectory_periods` and $t \in [0,1]$ over the generated segments.
+
+### Current defaults
+
+- `enable_animation=true`
+- `trajectory_periods=1.5`
+- `trajectory_points_per_period=100`
+- timer period: 100 ms
+- generated points (default): 151
+
+### Logging during motion
+
+While animation is running, the node logs:
+
+- generated goal configuration
+- generated trajectory metadata
+- animation progress every 10 points
+- completion status
+
+This allows motion verification even in headless mode.
+
+### Run examples
+
+Headless animation check:
+
+```bash
+ros2 launch ur20_display ur20_display_launch.py enable_rviz:=false
+```
+
+RViz + animation:
+
+```bash
+ros2 launch ur20_display ur20_display_launch.py enable_rviz:=true enable_animation:=true
+```
+
+Static (no animation):
+
+```bash
+ros2 launch ur20_display ur20_display_launch.py enable_rviz:=false enable_animation:=false
+```
+
 ## Next Steps
 
-- Optional: add bonus trajectory animation publisher.
-- Optional: add Python trajectory plotter node.
+- Optional: add Python trajectory plotter node to generate motion profiles.
+- Optional: implement trajectory recording and replay functionality.
+- Optional: extend animation to support multiple periodic cycles or figure-8 patterns.

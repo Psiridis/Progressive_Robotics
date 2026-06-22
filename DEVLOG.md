@@ -1,5 +1,39 @@
 # Development Log
 
+## 2026-06-23
+
+### Step 3 Bonus: Periodic trajectory animation (completed)
+
+- Integrated periodic trajectory animation directly into `ur20_display_node` timer-driven runtime.
+- Added animation configuration parameters:
+  - `enable_animation` (default `true`)
+  - `trajectory_periods` (default `1.5`)
+  - `trajectory_points_per_period` (default `100`)
+- Implemented startup animation initialization flow:
+  - validate joint and animation parameters
+  - generate random UR20-compatible goal configuration
+  - generate periodic sinusoidal trajectory samples
+  - publish one point per timer callback on `/joint_states`
+- Added runtime progress logging for trajectory execution and completion.
+- Added fallback behavior to static joint-state publishing if animation is disabled or trajectory generation fails.
+
+### Build issue + fix (completed)
+
+- Hit a compile error in throttled logging macro usage due to `const` qualifier on `log_throttle(...)`.
+- Root cause: throttle macros access clock methods that require non-const path in this context.
+- Fix applied:
+  - removed `const` from `log_throttle(...)` declaration in `ur20_display_node.hpp`
+  - removed `const` from `log_throttle(...)` definition in `ur20_display_node.cpp`
+
+### Validation (completed)
+
+- Rebuilt package in container:
+  - `colcon build --packages-select ur20_display` (pass)
+- Runtime smoke test (headless):
+  - `ros2 run ur20_display ur20_display_node` with timeout
+  - verified node startup, goal generation, trajectory creation, and periodic progress logs.
+- Updated `README.md` to align launch arguments and bonus behavior with the current implementation.
+
 ## 2026-06-21
 
 ### Step 3: UR Description Dependency
