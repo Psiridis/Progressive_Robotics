@@ -1,11 +1,75 @@
 #include "ur20_display/ur20_display_node.hpp"
 
+#include <array>
+#include <chrono>
+#include <cstdint>
+#include <fmt/format.h>
+#include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
+#include <vector>
 
 #include "std_msgs/msg/color_rgba.hpp"
 
-UR20DisplayNode::UR20DisplayNode() : Node("ur20_display_node")
+namespace
+{
+constexpr auto kTimerPeriod = std::chrono::milliseconds{100};
+constexpr auto kValidationThrottleMs = 3000;
+constexpr auto kAxisLength = 0.20;
+constexpr auto kAxisScale = 0.01;
+constexpr auto kLabelHeight = 0.10;
+constexpr auto kLabelScale = 0.07;
+constexpr auto kVerificationTolerance = 1e-6;
+
+constexpr std::string_view kLogPrefix = "[UR20_DISPLAY]";
+constexpr std::string_view kLogBlue = "\033[34m";
+constexpr std::string_view kLogReset = "\033[0m";
+
+[[nodiscard]] std::string make_log_line(const std::string_view message)
+{
+  return fmt::format("{}{}{} {}", kLogBlue, kLogPrefix, kLogReset, message);
+}
+
+[[nodiscard]] geometry_msgs::msg::Point make_point(const Eigen::Vector3d& point)
+{
+  geometry_msgs::msg::Point msg;
+  msg.x = point.x();
+  msg.y = point.y();
+  msg.z = point.z();
+  return msg;
+}
+
+[[nodiscard]] std_msgs::msg::ColorRGBA make_color(
+  const float red,
+  const float green,
+  const float blue,
+  const float alpha = 1.0f)
+{
+  std_msgs::msg::ColorRGBA color;
+  color.r = red;
+  color.g = green;
+  color.b = blue;
+  color.a = alpha;
+  return color;
+}
+
+struct AxisVisual
+{
+  Eigen::Vector3d tip;
+  std_msgs::msg::ColorRGBA color;
+};
+
+[[nodiscard]] bool is_verified(const UR20DisplayNode::VerificationResult& result)
+{
+  return result.position_error < kVerificationTolerance &&
+         result.rotation_error < kVerificationTolerance;
+}
+}  // namespace
+
+UR20DisplayNode::UR20DisplayNode()
+: Node{"ur20_display_node"}
 {
   init_publishers();
   init_tf();
@@ -13,15 +77,14 @@ UR20DisplayNode::UR20DisplayNode() : Node("ur20_display_node")
   load_parameters();
   log_configuration();
 
-  m_timer = create_wall_timer(std::chrono::milliseconds(100),
-                              std::bind(&UR20DisplayNode::timer_callback, this));
+  m_timer = create_wall_timer(kTimerPeriod, [this] { timer_callback(); });
 }
 
 void UR20DisplayNode::init_publishers()
 {
   m_joint_pub = create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
   m_marker_pub =
-      create_publisher<visualization_msgs::msg::MarkerArray>("/ur20_display_markers", 10);
+    create_publisher<visualization_msgs::msg::MarkerArray>("/ur20_display_markers", 10);
 }
 
 void UR20DisplayNode::init_tf()
@@ -33,12 +96,17 @@ void UR20DisplayNode::init_tf()
 void UR20DisplayNode::declare_parameters()
 {
   declare_parameter<std::vector<std::string>>(
-      "joint_names",
-      std::vector<std::string>{"shoulder_pan_joint", "shoulder_lift_joint", "elbow_joint",
-                               "wrist_1_joint", "wrist_2_joint", "wrist_3_joint"});
+    "joint_names",
+    {"shoulder_pan_joint",
+     "shoulder_lift_joint",
+     "elbow_joint",
+     "wrist_1_joint",
+     "wrist_2_joint",
+     "wrist_3_joint"});
 
-  declare_parameter<std::vector<double>>("joint_positions",
-                                         std::vector<double>{0.0, -1.57, 1.57, -1.57, 1.57, 0.0});
+  declare_parameter<std::vector<double>>(
+    "joint_positions",
+    {0.0, -1.57, 1.57, -1.57, 1.57, 0.0});
 
   declare_parameter<std::string>("world_frame", "world");
   declare_parameter<std::string>("elbow_frame", "forearm_link");
@@ -54,28 +122,85 @@ void UR20DisplayNode::load_parameters()
   m_gripper_frame = get_parameter("gripper_frame").as_string();
 }
 
+void UR20DisplayNode::log(const std::string_view msg, const LogLevel level) const
+{
+  const std::string line = make_log_line(msg);
+
+  switch (level) {
+    case LogLevel::Info:
+      RCLCPP_INFO(get_logger(), "%s", line.c_str());
+      break;
+
+    case LogLevel::Warn:
+      RCLCPP_WARN(get_logger(), "%s", line.c_str());
+      break;
+
+    case LogLevel::Error:
+      RCLCPP_ERROR(get_logger(), "%s", line.c_str());
+      break;
+
+    case LogLevel::Debug:
+      RCLCPP_DEBUG(get_logger(), "%s", line.c_str());
+      break;
+  }
+}
+
+void UR20DisplayNode::log_throttle(
+  const std::string_view msg,
+  const LogLevel level,
+  const int64_t duration_ms)
+{
+  const std::string line = make_log_line(msg);
+
+  switch (level) {
+    case LogLevel::Info:
+      RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), duration_ms, "%s", line.c_str());
+      break;
+
+    case LogLevel::Warn:
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), duration_ms, "%s", line.c_str());
+      break;
+
+    case LogLevel::Error:
+      RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), duration_ms, "%s", line.c_str());
+      break;
+
+    case LogLevel::Debug:
+      RCLCPP_DEBUG_THROTTLE(get_logger(), *get_clock(), duration_ms, "%s", line.c_str());
+      break;
+  }
+}
+
 bool UR20DisplayNode::validate_joint_parameters() const
 {
+  bool valid = true;
+
   if (m_joint_names.empty()) {
-    RCLCPP_ERROR(get_logger(), "Parameter 'joint_names' cannot be empty.");
-    return false;
+    log("Parameter 'joint_names' cannot be empty.", LogLevel::Error);
+    valid = false;
+  } else if (m_joint_names.size() != m_joint_positions.size()) {
+    log(
+      fmt::format(
+        "Parameter size mismatch: joint_names={}, joint_positions={}",
+        m_joint_names.size(),
+        m_joint_positions.size()),
+      LogLevel::Error);
+    valid = false;
   }
 
-  if (m_joint_names.size() != m_joint_positions.size()) {
-    RCLCPP_ERROR(get_logger(), "Parameter size mismatch: joint_names=%zu, joint_positions=%zu",
-                 m_joint_names.size(), m_joint_positions.size());
-    return false;
-  }
-
-  return true;
+  return valid;
 }
 
 void UR20DisplayNode::log_configuration() const
 {
-  RCLCPP_INFO(get_logger(),
-              "UR20 Display Node initialized: joints=%zu, world='%s', elbow='%s', gripper='%s'",
-              m_joint_names.size(), m_world_frame.c_str(), m_elbow_frame.c_str(),
-              m_gripper_frame.c_str());
+  log(
+    fmt::format(
+      "UR20 Display Node initialized: joints={}, world='{}', elbow='{}', gripper='{}'",
+      m_joint_names.size(),
+      m_world_frame,
+      m_elbow_frame,
+      m_gripper_frame),
+    LogLevel::Info);
 }
 
 void UR20DisplayNode::publish_joint_state()
@@ -84,162 +209,167 @@ void UR20DisplayNode::publish_joint_state()
   joint_msg.header.stamp = now();
   joint_msg.name = m_joint_names;
   joint_msg.position = m_joint_positions;
+
   m_joint_pub->publish(joint_msg);
 }
 
-bool UR20DisplayNode::lookup_transforms(TransformChain& chain) const
+std::optional<UR20DisplayNode::TransformChain> UR20DisplayNode::lookup_transforms() const
 {
+  std::optional<TransformChain> chain;
+
   try {
-    chain.tf_elbow_gripper =
-        m_tf_buffer->lookupTransform(m_elbow_frame, m_gripper_frame, rclcpp::Time(0));
-    chain.tf_world_elbow =
-        m_tf_buffer->lookupTransform(m_world_frame, m_elbow_frame, rclcpp::Time(0));
-    chain.tf_world_gripper =
-        m_tf_buffer->lookupTransform(m_world_frame, m_gripper_frame, rclcpp::Time(0));
-    return true;
+    chain.emplace(TransformChain{
+      .tf_elbow_gripper =
+        m_tf_buffer->lookupTransform(m_elbow_frame, m_gripper_frame, rclcpp::Time{0}),
+
+      .tf_world_elbow =
+        m_tf_buffer->lookupTransform(m_world_frame, m_elbow_frame, rclcpp::Time{0}),
+
+      .tf_world_gripper =
+        m_tf_buffer->lookupTransform(m_world_frame, m_gripper_frame, rclcpp::Time{0})});
   } catch (const tf2::TransformException& ex) {
-    RCLCPP_DEBUG(get_logger(), "Transform lookup failed: %s", ex.what());
-    return false;
+    log(fmt::format("Transform lookup failed: {}", ex.what()), LogLevel::Debug);
+    chain.reset();
   }
+
+  return chain;
 }
 
-Eigen::Isometry3d UR20DisplayNode::to_isometry(const geometry_msgs::msg::Transform& transform_msg)
+Eigen::Isometry3d UR20DisplayNode::to_isometry(
+  const geometry_msgs::msg::Transform& transform_msg)
 {
   return tf2::transformToEigen(transform_msg);
 }
 
-UR20DisplayNode::VerificationResult
-UR20DisplayNode::verify_chain(const TransformChain& chain,
-                              Eigen::Isometry3d& t_world_gripper_computed) const
+UR20DisplayNode::VerificationResult UR20DisplayNode::verify_chain(
+  const TransformChain& chain,
+  Eigen::Isometry3d& t_world_gripper_computed) const
 {
-  const Eigen::Isometry3d t_elbow_gripper = to_isometry(chain.tf_elbow_gripper.transform);
-  const Eigen::Isometry3d t_world_elbow = to_isometry(chain.tf_world_elbow.transform);
-  const Eigen::Isometry3d t_world_gripper_direct = to_isometry(chain.tf_world_gripper.transform);
+  const auto t_elbow_gripper = to_isometry(chain.tf_elbow_gripper.transform);
+  const auto t_world_elbow = to_isometry(chain.tf_world_elbow.transform);
+  const auto t_world_gripper_direct = to_isometry(chain.tf_world_gripper.transform);
 
   t_world_gripper_computed = t_world_elbow * t_elbow_gripper;
 
-  VerificationResult result;
-  result.position_error =
-      (t_world_gripper_direct.translation() - t_world_gripper_computed.translation()).norm();
-  result.rotation_error =
-      (t_world_gripper_direct.linear() - t_world_gripper_computed.linear()).norm();
-
-  return result;
+  return VerificationResult{
+    .position_error =
+      (t_world_gripper_direct.translation() - t_world_gripper_computed.translation()).norm(),
+    .rotation_error =
+      (t_world_gripper_direct.linear() - t_world_gripper_computed.linear()).norm()};
 }
 
-void UR20DisplayNode::publish_frame_and_label(const Eigen::Isometry3d& t_world_gripper_computed)
+void UR20DisplayNode::publish_frame_and_label(
+  const Eigen::Isometry3d& t_world_gripper_computed)
 {
   visualization_msgs::msg::MarkerArray marker_array;
 
   const Eigen::Vector3d origin = t_world_gripper_computed.translation();
   const Eigen::Matrix3d rotation = t_world_gripper_computed.linear();
-  const double axis_length = 0.20;
+  const auto timestamp = now();
 
   visualization_msgs::msg::Marker axes;
   axes.header.frame_id = m_world_frame;
-  axes.header.stamp = now();
+  axes.header.stamp = timestamp;
   axes.ns = "tf_world_gripper";
   axes.id = 0;
   axes.type = visualization_msgs::msg::Marker::LINE_LIST;
   axes.action = visualization_msgs::msg::Marker::ADD;
-  axes.scale.x = 0.01;
+  axes.scale.x = kAxisScale;
   axes.color.a = 1.0;
 
-  auto make_point = [](const Eigen::Vector3d& p) {
-    geometry_msgs::msg::Point msg;
-    msg.x = p.x();
-    msg.y = p.y();
-    msg.z = p.z();
-    return msg;
-  };
+  const std::array<AxisVisual, 3> axis_data{
+    AxisVisual{
+      .tip = origin + rotation.col(0) * kAxisLength,
+      .color = make_color(1.0f, 0.0f, 0.0f)},
+    AxisVisual{
+      .tip = origin + rotation.col(1) * kAxisLength,
+      .color = make_color(0.0f, 1.0f, 0.0f)},
+    AxisVisual{
+      .tip = origin + rotation.col(2) * kAxisLength,
+      .color = make_color(0.0f, 0.0f, 1.0f)}};
 
-  auto make_color = [](float r, float g, float b, float a) {
-    std_msgs::msg::ColorRGBA color;
-    color.r = r;
-    color.g = g;
-    color.b = b;
-    color.a = a;
-    return color;
-  };
+  axes.points.reserve(axis_data.size() * 2);
+  axes.colors.reserve(axis_data.size() * 2);
 
-  const Eigen::Vector3d x_tip = origin + rotation.col(0) * axis_length;
-  const Eigen::Vector3d y_tip = origin + rotation.col(1) * axis_length;
-  const Eigen::Vector3d z_tip = origin + rotation.col(2) * axis_length;
-
-  axes.points.push_back(make_point(origin));
-  axes.points.push_back(make_point(x_tip));
-  axes.colors.push_back(make_color(1.0f, 0.0f, 0.0f, 1.0f));
-  axes.colors.push_back(make_color(1.0f, 0.0f, 0.0f, 1.0f));
-
-  axes.points.push_back(make_point(origin));
-  axes.points.push_back(make_point(y_tip));
-  axes.colors.push_back(make_color(0.0f, 1.0f, 0.0f, 1.0f));
-  axes.colors.push_back(make_color(0.0f, 1.0f, 0.0f, 1.0f));
-
-  axes.points.push_back(make_point(origin));
-  axes.points.push_back(make_point(z_tip));
-  axes.colors.push_back(make_color(0.0f, 0.0f, 1.0f, 1.0f));
-  axes.colors.push_back(make_color(0.0f, 0.0f, 1.0f, 1.0f));
+  for (const auto& axis : axis_data) {
+    axes.points.push_back(make_point(origin));
+    axes.points.push_back(make_point(axis.tip));
+    axes.colors.push_back(axis.color);
+    axes.colors.push_back(axis.color);
+  }
 
   visualization_msgs::msg::Marker label;
   label.header.frame_id = m_world_frame;
-  label.header.stamp = now();
+  label.header.stamp = timestamp;
   label.ns = "tf_world_gripper";
   label.id = 1;
   label.type = visualization_msgs::msg::Marker::TEXT_VIEW_FACING;
   label.action = visualization_msgs::msg::Marker::ADD;
-  label.pose.position = make_point(origin + Eigen::Vector3d(0.0, 0.0, 0.10));
+  label.pose.position = make_point(origin + Eigen::Vector3d{0.0, 0.0, kLabelHeight});
   label.pose.orientation.w = 1.0;
-  label.scale.z = 0.07;
-  label.color.a = 1.0;
-  label.color.r = 1.0;
-  label.color.g = 1.0;
-  label.color.b = 1.0;
-  label.text = "Tf_elbow_gripper";
+  label.scale.z = kLabelScale;
+  label.color = make_color(1.0f, 1.0f, 1.0f);
+  label.text = "T_world_gripper";
 
+  marker_array.markers.reserve(2);
   marker_array.markers.push_back(std::move(axes));
   marker_array.markers.push_back(std::move(label));
+
   m_marker_pub->publish(marker_array);
 }
 
 void UR20DisplayNode::log_verification(const VerificationResult& result) const
 {
-  if (result.position_error < 1e-6 && result.rotation_error < 1e-6) {
-    RCLCPP_DEBUG(get_logger(), "Transform chain verified. Position error=%.3e, rotation error=%.3e",
-                 result.position_error, result.rotation_error);
-    return;
-  }
+  const bool verified = is_verified(result);
 
-  RCLCPP_WARN(get_logger(), "Transform chain mismatch. Position error=%.6f, rotation error=%.6f",
-              result.position_error, result.rotation_error);
+  if (verified) {
+    log(
+      fmt::format(
+        "Transform chain verified. Position error={:.3e}, rotation error={:.3e}",
+        result.position_error,
+        result.rotation_error),
+      LogLevel::Debug);
+  } else {
+    log(
+      fmt::format(
+        "Transform chain mismatch. Position error={:.6f}, rotation error={:.6f}",
+        result.position_error,
+        result.rotation_error),
+      LogLevel::Warn);
+  }
 }
 
 void UR20DisplayNode::timer_callback()
 {
-  if (!validate_joint_parameters()) {
-    RCLCPP_ERROR_THROTTLE(get_logger(), *get_clock(), 3000,
-                          "Joint parameter validation failed. Skipping publish cycle.");
-    return;
+  const bool valid_params = validate_joint_parameters();
+
+  if (valid_params) {
+    publish_joint_state();
+
+    const std::optional<TransformChain> chain = lookup_transforms();
+
+    if (chain.has_value()) {
+      Eigen::Isometry3d t_world_gripper_computed = Eigen::Isometry3d::Identity();
+      const VerificationResult result = verify_chain(*chain, t_world_gripper_computed);
+
+      log_verification(result);
+      publish_frame_and_label(t_world_gripper_computed);
+    }
+  } else {
+    log_throttle(
+      "Joint parameter validation failed. Skipping publish cycle.",
+      LogLevel::Error,
+      kValidationThrottleMs);
   }
-
-  publish_joint_state();
-
-  TransformChain chain;
-  if (!lookup_transforms(chain)) {
-    return;
-  }
-
-  Eigen::Isometry3d t_world_gripper_computed = Eigen::Isometry3d::Identity();
-  const VerificationResult result = verify_chain(chain, t_world_gripper_computed);
-  log_verification(result);
-  publish_frame_and_label(t_world_gripper_computed);
 }
 
 int main(int argc, char** argv)
 {
   rclcpp::init(argc, argv);
-  auto node = std::make_shared<UR20DisplayNode>();
+
+  const auto node = std::make_shared<UR20DisplayNode>();
   rclcpp::spin(node);
+
   rclcpp::shutdown();
   return 0;
 }

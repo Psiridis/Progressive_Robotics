@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.8)
 project(ur20_display)
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
@@ -15,6 +19,7 @@ find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(fmt REQUIRED)
 
 # Build ur20_display_node executable
 add_executable(ur20_display_node src/ur20_display_node.cpp)
@@ -35,7 +40,7 @@ ament_target_dependencies(ur20_display_node
   tf2_eigen
 )
 
-target_link_libraries(ur20_display_node Eigen3::Eigen)
+target_link_libraries(ur20_display_node Eigen3::Eigen fmt::fmt)
 
 install(TARGETS ur20_display_node
   DESTINATION lib/${PROJECT_NAME}
