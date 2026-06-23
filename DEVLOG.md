@@ -2,6 +2,32 @@
 
 ## 2026-06-23
 
+### Step 3 Bonus 2: trajectory topic + Python plotter (completed)
+
+- Added `trajectory_msgs/msg/JointTrajectory` publisher in `ur20_display_node` on `/ur20_display/joint_trajectory`.
+- Configured trajectory publisher QoS to `transient_local` so late subscribers can still receive the latest trajectory message.
+- Published full periodic trajectory message once during animation initialization.
+- Added Python plotter node `scripts/trajectory_plotter.py`:
+  - subscribes to `/ur20_display/joint_trajectory` with compatible transient-local/reliable QoS
+  - generates per-joint trajectory plot with matplotlib
+  - writes output PNG to configured path
+- Installed and wired runtime dependencies:
+  - Docker image now installs `python3-matplotlib`
+  - package metadata updated with `rclpy`, `trajectory_msgs`, and `python3-matplotlib`
+  - package install step now exports `trajectory_plotter.py`
+
+### Step 3 launch/runtime updates (completed)
+
+- Launch file updates:
+  - hardened xacro invocation using `FindExecutable(name="xacro")`
+  - added optional `enable_trajectory_plotter` launch argument
+  - added conditional launch of `trajectory_plotter.py`
+  - set default plot output path to `src/ur20_display/scripts/ur20_joint_trajectory.png`
+- Docker compose updates for GUI forwarding:
+  - mounted `/tmp/.X11-unix` in container
+- Reduced runtime terminal noise:
+  - removed continuous animation progress logs in timer loop
+
 ### Step 3 Bonus: Periodic trajectory animation (completed)
 
 - Integrated periodic trajectory animation directly into `ur20_display_node` timer-driven runtime.
@@ -14,7 +40,7 @@
   - generate random UR20-compatible goal configuration
   - generate periodic sinusoidal trajectory samples
   - publish one point per timer callback on `/joint_states`
-- Added runtime progress logging for trajectory execution and completion.
+- Added runtime completion logging for trajectory execution.
 - Added fallback behavior to static joint-state publishing if animation is disabled or trajectory generation fails.
 
 ### Build issue + fix (completed)
@@ -31,8 +57,14 @@
   - `colcon build --packages-select ur20_display` (pass)
 - Runtime smoke test (headless):
   - `ros2 run ur20_display ur20_display_node` with timeout
-  - verified node startup, goal generation, trajectory creation, and periodic progress logs.
+  - verified node startup, goal generation, trajectory creation, and completion behavior.
 - Updated `README.md` to align launch arguments and bonus behavior with the current implementation.
+
+### Documentation sync + remaining submission artifact
+
+- Updated `README.md` to include Bonus 2 run instructions and trajectory plotting details.
+- Removed stale "Next Steps" item that claimed plotter was pending.
+- Remaining submission artifact to add: final RViz screenshot in expected final configuration.
 
 ## 2026-06-21
 

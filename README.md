@@ -21,6 +21,8 @@ Progress is organized in milestones:
 - Step 3: UR20 model + gripper integration completed
 - Step 3: ur20_display node implementation completed
 - Step 3: Headless and optional RViz launch flow completed
+- Step 3 Bonus 1: Periodic trajectory animation completed
+- Step 3 Bonus 2: Python trajectory plotter integration completed
 
 ## Repository Layout
 
@@ -76,6 +78,7 @@ The container installs the following packages required by the assignment:
 - `libeigen3-dev`
 - `libyaml-cpp-dev`
 - `ros-humble-rviz-visual-tools`
+- `python3-matplotlib`
 
 ## Notes
 
@@ -283,6 +286,19 @@ $$
 - `enable_rviz` (default `false`)
   - Launch RViz window for visualization
 
+- `use_software_rendering` (default `true`)
+  - Force Mesa software (CPU) rendering for RViz
+  - Essential when running through Docker/XQuartz on macOS
+  - Set to `false` only on native Linux with full GPU/OpenGL support
+
+- `enable_trajectory_plotter` (default `false`)
+   - Launch Python node that subscribes to `/ur20_display/joint_trajectory`
+   - Saves joint trajectory plot to PNG
+
+### ur20_display node parameters
+
+The launch file passes default joint/frame parameters to `ur20_display_node`. The node also supports:
+
 - `enable_animation` (default `true`)
    - Enable periodic joint trajectory animation in `ur20_display_node`
 
@@ -291,11 +307,6 @@ $$
 
 - `trajectory_points_per_period` (default `100`)
    - Number of discrete trajectory points generated per period
-
-- `use_software_rendering` (default `true`)
-  - Force Mesa software (CPU) rendering for RViz
-  - Essential when running through Docker/XQuartz on macOS
-  - Set to `false` only on native Linux with full GPU/OpenGL support
 
 `enable_rviz:=false` keeps runtime headless for clean development logs.
 
@@ -495,7 +506,6 @@ While animation is running, the node logs:
 
 - generated goal configuration
 - generated trajectory metadata
-- animation progress every 10 points
 - completion status
 
 This allows motion verification even in headless mode.
@@ -520,8 +530,32 @@ Static (no animation):
 ros2 launch ur20_display ur20_display_launch.py enable_rviz:=false enable_animation:=false
 ```
 
-## Next Steps
+## Bonus 2: Python trajectory plotter
 
-- Optional: add Python trajectory plotter node to generate motion profiles.
-- Optional: implement trajectory recording and replay functionality.
-- Optional: extend animation to support multiple periodic cycles or figure-8 patterns.
+A Python node subscribes to `/ur20_display/joint_trajectory` and writes a matplotlib plot with one curve per joint.
+
+- Script: `src/ur20_display/scripts/trajectory_plotter.py`
+- Topic: `/ur20_display/joint_trajectory`
+- Output image (default from launch): `src/ur20_display/scripts/ur20_joint_trajectory.png`
+- QoS: transient_local + reliable to receive trajectory even for late subscribers
+
+### Run with plotter enabled
+
+```bash
+ros2 launch ur20_display ur20_display_launch.py enable_rviz:=true enable_trajectory_plotter:=true
+```
+
+Headless plotting is also supported:
+
+```bash
+ros2 launch ur20_display ur20_display_launch.py enable_rviz:=false enable_trajectory_plotter:=true
+```
+
+## Submission Checklist
+
+- [x] Step 1 Docker environment and instructions
+- [x] Step 2 service + client/server + synchronization thread
+- [x] Step 3 UR20 + gripper + launch + RViz config
+- [x] Bonus 1 periodic animation
+- [x] Bonus 2 trajectory topic + Python plotter
+- [ ] Add RViz screenshot for final submission package
