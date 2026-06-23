@@ -54,12 +54,20 @@ LAUNCH ARGUMENTS:
 - use_software_rendering (default: true)
   Force Mesa software rendering for GUI forwarding scenarios
   Set to false only if running on native Linux with full OpenGL support
+
+- enable_trajectory_plotter (default: false)
+  Start the Python trajectory plotter node
 """
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, SetEnvironmentVariable
 from launch.conditions import IfCondition
-from launch.substitutions import Command, LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import (
+    Command,
+    FindExecutable,
+    LaunchConfiguration,
+    PathJoinSubstitution,
+)
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
@@ -68,6 +76,7 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration("use_sim_time")
     enable_rviz = LaunchConfiguration("enable_rviz")
     use_software_rendering = LaunchConfiguration("use_software_rendering")
+    enable_trajectory_plotter = LaunchConfiguration("enable_trajectory_plotter")
 
     urdf_file = PathJoinSubstitution([
         FindPackageShare("ur20_display"),
@@ -83,24 +92,23 @@ def generate_launch_description():
 
     robot_description = {
         "robot_description": Command([
-            "xacro ",
+            FindExecutable(name="xacro"),
+            " ",
             urdf_file,
         ])
     }
 
-    return LaunchDescription([
+    launch_actions = [
         DeclareLaunchArgument(
             "use_sim_time",
             default_value="false",
             description="Use simulation time if true.",
         ),
-
         DeclareLaunchArgument(
             "enable_rviz",
             default_value="false",
             description="Launch RViz if true.",
         ),
-
         DeclareLaunchArgument(
             "use_software_rendering",
             default_value="true",
@@ -109,21 +117,23 @@ def generate_launch_description():
                 "Useful when running RViz through Docker/XQuartz on macOS."
             ),
         ),
-
+        DeclareLaunchArgument(
+            "enable_trajectory_plotter",
+            default_value="false",
+            description="Start the Python trajectory plotter node.",
+        ),
         # ============================================================================
         # macOS GUI Forwarding Configuration
         # ============================================================================
         # These environment variables are essential for RViz to work through XQuartz
         # on macOS. They disable hardware rendering and fix X11 protocol issues.
         # ============================================================================
-
         # Fix for X11 shared memory protocol issues in Docker
         # Prevents "MIT-SHM" errors when Qt apps forward via X11 over network
         SetEnvironmentVariable(
             name="QT_X11_NO_MITSHM",
             value="1",
         ),
-
         # Force software-based OpenGL rendering instead of hardware acceleration
         # This ensures RViz works reliably through XQuartz forwarding on macOS
         # Value is controlled by use_software_rendering argument
@@ -131,7 +141,6 @@ def generate_launch_description():
             name="LIBGL_ALWAYS_SOFTWARE",
             value=use_software_rendering,
         ),
-
         Node(
             package="robot_state_publisher",
             executable="robot_state_publisher",
@@ -142,7 +151,6 @@ def generate_launch_description():
                 {"use_sim_time": use_sim_time},
             ],
         ),
-
         Node(
             package="ur20_display",
             executable="ur20_display_node",
@@ -173,7 +181,6 @@ def generate_launch_description():
                 {"use_sim_time": use_sim_time},
             ],
         ),
-
         Node(
             package="rviz2",
             executable="rviz2",
@@ -193,4 +200,18 @@ def generate_launch_description():
             #   4. If still no window, check docker-compose.yml DISPLAY setting
             condition=IfCondition(enable_rviz),
         ),
-    ])
+        Node(
+            package="ur20_display",
+            executable="trajectory_plotter.py",
+            name="trajectory_plotter",
+            output="screen",
+            condition=IfCondition(enable_trajectory_plotter),
+            parameters=[
+                {
+                    "output_path": "/ros2_ws/src/ur20_display/scripts/ur20_joint_trajectory.png"
+                }
+            ],
+        ),
+    ]
+
+    return LaunchDescription(launch_actions)

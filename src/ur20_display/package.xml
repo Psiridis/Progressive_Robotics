@@ -22,11 +22,15 @@
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>rviz2</exec_depend>
+  <exec_depend>rclpy</exec_depend>
   <depend>xacro</depend>
   <depend>ur_description</depend>
+  <depend>trajectory_msgs</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
+
+  <exec_depend>python3-matplotlib</exec_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

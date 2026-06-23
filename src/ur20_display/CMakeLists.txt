@@ -20,6 +20,7 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(fmt REQUIRED)
+find_package(trajectory_msgs REQUIRED)
 
 # Build ur20_display_node executable
 add_executable(ur20_display_node src/ur20_display_node.cpp)
@@ -38,6 +39,7 @@ ament_target_dependencies(ur20_display_node
   tf2
   tf2_ros
   tf2_eigen
+  trajectory_msgs
 )
 
 target_link_libraries(ur20_display_node Eigen3::Eigen fmt::fmt)
@@ -55,6 +57,11 @@ install(DIRECTORY
   urdf
   rviz
   DESTINATION share/${PROJECT_NAME}
+)
+
+install(PROGRAMS
+  scripts/trajectory_plotter.py
+  DESTINATION lib/${PROJECT_NAME}
 )
 
 ament_package()

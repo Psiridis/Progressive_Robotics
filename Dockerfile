@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libyaml-cpp-dev \
     ros-humble-xacro \
     ros-humble-rviz-visual-tools \
+    python3-matplotlib \
     && rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /ros2_ws/src

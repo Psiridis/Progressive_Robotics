@@ -85,6 +85,11 @@ void UR20DisplayNode::init_publishers()
   m_joint_pub = create_publisher<sensor_msgs::msg::JointState>("/joint_states", 10);
   m_marker_pub =
       create_publisher<visualization_msgs::msg::MarkerArray>("/ur20_display_markers", 10);
+
+  // The trajectory publisher is set to transient_local QoS to ensure that
+  // late subscribers receive the last published trajectory message.
+  m_trajectory_publisher = create_publisher<trajectory_msgs::msg::JointTrajectory>(
+      "/ur20_display/joint_trajectory", rclcpp::QoS{1}.transient_local());
 }
 
 void UR20DisplayNode::init_tf()
@@ -222,6 +227,38 @@ void UR20DisplayNode::publish_joint_state()
   joint_msg.position = m_joint_positions;
 
   m_joint_pub->publish(joint_msg);
+}
+
+void UR20DisplayNode::publish_trajectory_message(
+    const std::vector<std::vector<double>>& trajectory) const
+{
+  trajectory_msgs::msg::JointTrajectory message;
+  message.header.stamp = now();
+  message.header.frame_id = m_world_frame;
+  message.joint_names = m_joint_names;
+
+  message.points.reserve(trajectory.size());
+
+  for (std::size_t index = 0; index < trajectory.size(); ++index) {
+    trajectory_msgs::msg::JointTrajectoryPoint point;
+    point.positions = trajectory[index];
+
+    const auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(kTimerPeriod * index);
+
+    const auto elapsed_ns = elapsed.count();
+
+    point.time_from_start.sec = static_cast<int32_t>(elapsed_ns / 1'000'000'000);
+
+    point.time_from_start.nanosec = static_cast<uint32_t>(elapsed_ns % 1'000'000'000);
+
+    message.points.push_back(std::move(point));
+  }
+
+  m_trajectory_publisher->publish(message);
+
+  log(fmt::format("Published trajectory message with {} points on /ur20_display/joint_trajectory.",
+                  message.points.size()),
+      LogLevel::Info);
 }
 
 std::optional<UR20DisplayNode::TransformChain> UR20DisplayNode::lookup_transforms() const
@@ -447,6 +484,7 @@ void UR20DisplayNode::initialize_animation()
 
         if (trajectory.has_value()) {
           m_trajectory = *trajectory;
+          publish_trajectory_message(m_trajectory);
           log(fmt::format("Trajectory animation initialized with {} points. Timer period is {} ms.",
                           m_trajectory.size(), kTimerPeriod.count()),
               LogLevel::Info);
@@ -477,15 +515,6 @@ void UR20DisplayNode::publish_next_trajectory_point()
     if (m_trajectory_index < m_trajectory.size()) {
       m_joint_positions = m_trajectory[m_trajectory_index];
       publish_joint_state();
-
-      if (m_trajectory_index % 10U == 0U || m_trajectory_index + 1U == m_trajectory.size()) {
-        const double progress = 100.0 * static_cast<double>(m_trajectory_index) /
-                                static_cast<double>(m_trajectory.size() - 1U);
-
-        log(fmt::format("Animation progress: {:6.2f}% ({}/{})", progress, m_trajectory_index + 1U,
-                        m_trajectory.size()),
-            LogLevel::Info);
-      }
 
       ++m_trajectory_index;
     } else {

@@ -16,6 +16,7 @@
 #include "tf2_eigen/tf2_eigen.hpp"
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
+#include "trajectory_msgs/msg/joint_trajectory.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 
 class UR20DisplayNode : public rclcpp::Node {
@@ -51,6 +52,7 @@ private:
   void log_configuration() const;
 
   void publish_joint_state();
+  void publish_trajectory_message(const std::vector<std::vector<double>>& trajectory) const;
   [[nodiscard]] std::optional<TransformChain> lookup_transforms() const;
 
   static Eigen::Isometry3d to_isometry(const geometry_msgs::msg::Transform& transform_msg);
@@ -73,6 +75,7 @@ private:
 
   void timer_callback();
 
+  rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr m_trajectory_publisher;
   rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr m_joint_pub;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr m_marker_pub;
   rclcpp::TimerBase::SharedPtr m_timer;
